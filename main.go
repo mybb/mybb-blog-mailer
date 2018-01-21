@@ -7,13 +7,43 @@ import (
 	"os"
 
 	"github.com/google/go-github/github"
+	"gopkg.in/mailgun/mailgun-go.v1"
+)
+
+const (
+	emailContent = `Hi, %recipient_email%
+
+There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).
+
+Unsubscribe: %unsubscribe_url%
+Mailing list unsubscribe: %mailing_list_unsubscribe_url%
+Unsubscribe email: %unsubscribe_email%`
 )
 
 var (
-	port    = os.Getenv("PORT")
-	secret  = []byte(os.Getenv("GH_HOOK_SECRET"))
-	feedUrl = os.Getenv("XML_FEED_URL")
+	port             = os.Getenv("PORT")
+	secret           = []byte(os.Getenv("GH_HOOK_SECRET"))
+	mailGunDomain    = os.Getenv("MAILGUN_DOMAIN")
+	mailGunApiKey    = os.Getenv("MAILGUN_API_KEY")
+	mailGunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
 )
+
+func sendMailNotification() {
+	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
+
+	message := mg.NewMessage(
+		"no-reply@mybbstuff.com",
+		"New MyBB Blog Post",
+		emailContent,
+		"blog.mybb.com@mybbstuff.com")
+
+	resp, id, err := mg.Send(message)
+	if err != nil {
+		log.Printf("[ERROR] unable to send update email: %s\n", err)
+	}
+
+	log.Printf("[DEBUG] sent email with id %s: %s\n", id, resp)
+}
 
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := github.ValidatePayload(r, secret)
@@ -41,6 +71,7 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 			log.Println("[DEBUG] received successful page build event, reading feed to send emails")
 
 			// Build was successful, so get the newest post and send email via MailGun
+			sendMailNotification()
 		case "queued":
 			log.Println("[DEBUG] rceived page build event with queued status")
 		case "building":
