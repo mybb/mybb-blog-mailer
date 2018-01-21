@@ -15,15 +15,14 @@ const (
 
 There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).
 
-Unsubscribe: %unsubscribe_url%
-Mailing list unsubscribe: %mailing_list_unsubscribe_url%`
+Unsubscribe from MyBB blog updates: %mailing_list_unsubscribe_url%`
 
 	emailContentHtml = `<div class="container">
 	<p>Hi, <stong>%recipient_email%</strong></p>
 
 	<p>There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).</p>
 
-	<p class="footer"><a class="btn btn--unsubscribe" href="%unsubscribe_url%">Unsubscribe from MyBB blog updates</a></p>
+	<p class="footer"><a class="btn btn--unsubscribe" href="%mailing_list_unsubscribe_url%">Unsubscribe from MyBB blog updates</a></p>
 </div>`
 )
 
@@ -37,6 +36,8 @@ var (
 )
 
 func sendMailNotification() {
+	// TODO: Get the most recent post from the XML feed, and check if we've already sent a message for it. If so, don't send an email
+
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
 	message := mg.NewMessage(
