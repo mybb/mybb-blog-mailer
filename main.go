@@ -47,6 +47,8 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		log.Printf("[DEBUG] rceived successful page build event with status '%s'. URL: %s\n", e.Build.GetStatus(), e.Build.GetURL())
+
 		// Build was successful, so get the newest post and send email via MailGun
 	default:
 		warningMessage := fmt.Sprintf("unknown event type: %s", github.WebHookType(r))
