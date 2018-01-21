@@ -10,11 +10,11 @@ import (
 
 var (
 	port   = os.Getenv("PORT")
-	secret = os.Getenv("GH_HOOK_SECRET")
+	secret = []byte(os.Getenv("GH_HOOK_SECRET"))
 )
 
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
-	payload, err := github.ValidatePayload(r, []byte("my-secret-key"))
+	payload, err := github.ValidatePayload(r, secret)
 	if err != nil {
 		log.Printf("[ERROR] error validating request body: %s\n", err)
 		return
