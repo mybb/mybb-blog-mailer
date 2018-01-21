@@ -1,10 +1,11 @@
 package main
 
 import (
-	"io"
 	"log"
 	"net/http"
 	"os"
+
+	"github.com/google/go-github/github"
 )
 
 var (
@@ -13,11 +14,27 @@ var (
 )
 
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
-	log.Printf("headers: %v\n", r.Header)
-
-	_, err := io.Copy(os.Stdout, r.Body)
+	payload, err := github.ValidatePayload(r, []byte("my-secret-key"))
 	if err != nil {
-		log.Println(err)
+		log.Printf("[ERROR] error validating request body: %s\n", err)
+		return
+	}
+
+	defer r.Body.Close()
+
+	event, err := github.ParseWebHook(github.WebHookType(r), payload)
+	if err != nil {
+		log.Printf("[ERROR] could not parse webhook: %s\n", err)
+		return
+	}
+
+	switch e := event.(type) {
+	case *github.PageBuildEvent:
+		log.Printf("[DEBUG] received page build event: %v\n", e)
+
+		// TODO: Parse the event and send the email
+	default:
+		log.Printf("[WARN] unknown event type: %s\n", github.WebHookType(r))
 		return
 	}
 }
@@ -27,7 +44,7 @@ func main() {
 
 	address := ":" + port
 
-	log.Printf("Starting webhook server on %s", address)
+	log.Printf("[DEBUG] starting webhook server: %s", address)
 
 	log.Fatalln(http.ListenAndServe(address, nil))
 }
