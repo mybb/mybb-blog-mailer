@@ -16,8 +16,7 @@ const (
 There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).
 
 Unsubscribe: %unsubscribe_url%
-Mailing list unsubscribe: %mailing_list_unsubscribe_url%
-Unsubscribe email: %unsubscribe_email%`
+Mailing list unsubscribe: %mailing_list_unsubscribe_url%`
 )
 
 var (
@@ -32,17 +31,19 @@ func sendMailNotification() {
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
 	message := mg.NewMessage(
-		"no-reply@mybbstuff.com",
+		"postmaster@mybbstuff.com",
 		"New MyBB Blog Post",
 		emailContent,
 		"blog.mybb.com@mybbstuff.com")
 
+	message.AddHeader("List-Unsubscribe", "%unsubscribe_email%")
+
 	resp, id, err := mg.Send(message)
 	if err != nil {
 		log.Printf("[ERROR] unable to send update email: %s\n", err)
+	} else {
+		log.Printf("[DEBUG] sent email with id %s and status: %s\n", id, resp)
 	}
-
-	log.Printf("[DEBUG] sent email with id %s: %s\n", id, resp)
 }
 
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
