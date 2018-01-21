@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +18,8 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := github.ValidatePayload(r, secret)
 	if err != nil {
 		log.Printf("[ERROR] error validating request body: %s\n", err)
+
+		http.Error(w, "error validating request body", http.StatusBadRequest)
 		return
 	}
 
@@ -25,16 +28,32 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	event, err := github.ParseWebHook(github.WebHookType(r), payload)
 	if err != nil {
 		log.Printf("[ERROR] could not parse webhook: %s\n", err)
+
+		http.Error(w, "error parsing webhook content", http.StatusBadRequest)
 		return
 	}
 
 	switch e := event.(type) {
 	case *github.PageBuildEvent:
-		log.Printf("[DEBUG] received page build event: %v\n", e)
+		buildError := e.Build.GetError()
+		buildErrorMessage := ""
 
-		// TODO: Parse the event and send the email
+		if buildError != nil {
+			buildErrorMessage = buildError.GetMessage()
+		}
+
+		if len(buildErrorMessage) > 0 {
+			log.Printf("[WARN] received page build event with error message: %s\n", buildErrorMessage)
+			return
+		}
+
+		// Build was successful, so get the newest post and send email via MailGun
 	default:
-		log.Printf("[WARN] unknown event type: %s\n", github.WebHookType(r))
+		warningMessage := fmt.Sprintf("unknown event type: %s", github.WebHookType(r))
+
+		log.Printf("[WARN] "+warningMessage+"\n", github.WebHookType(r))
+
+		http.Error(w, warningMessage, http.StatusNotImplemented)
 		return
 	}
 }
