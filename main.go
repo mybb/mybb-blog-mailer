@@ -11,31 +11,41 @@ import (
 )
 
 const (
-	emailContent = `Hi, %recipient_email%
+	emailContentPlain = `Hi, %recipient_email%
 
 There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).
 
 Unsubscribe: %unsubscribe_url%
 Mailing list unsubscribe: %mailing_list_unsubscribe_url%`
+
+	emailContentHtml = `<div class="container">
+	<p>Hi, <stong>%recipient_email%</strong></p>
+
+	<p>There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).</p>
+
+	<p class="footer"><a class="btn btn--unsubscribe" href="%unsubscribe_url%">Unsubscribe from MyBB blog updates</a></p>
+</div>`
 )
 
 var (
-	port             = os.Getenv("PORT")
-	secret           = []byte(os.Getenv("GH_HOOK_SECRET"))
-	mailGunDomain    = os.Getenv("MAILGUN_DOMAIN")
-	mailGunApiKey    = os.Getenv("MAILGUN_API_KEY")
-	mailGunPublicKey = os.Getenv("MAILGUN_PUBLIC_KEY")
+	port                      = os.Getenv("PORT")
+	secret                    = []byte(os.Getenv("GH_HOOK_SECRET"))
+	mailGunDomain             = os.Getenv("MG_DOMAIN")
+	mailGunApiKey             = os.Getenv("MG_API_KEY")
+	mailGunPublicKey          = os.Getenv("MG_PUBLIC_API_KEY")
+	mailGunMailingListAddress = os.Getenv("MG_MAILING_LIST_ADDRESS")
 )
 
 func sendMailNotification() {
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
 	message := mg.NewMessage(
-		"postmaster@mybbstuff.com",
+		mailGunMailingListAddress,
 		"New MyBB Blog Post",
-		emailContent,
-		"blog.mybb.com@mybbstuff.com")
+		emailContentPlain,
+		mailGunMailingListAddress)
 
+	message.SetHtml(emailContentHtml)
 	message.AddHeader("List-Unsubscribe", "%unsubscribe_email%")
 
 	resp, id, err := mg.Send(message)
