@@ -10,8 +10,9 @@ import (
 )
 
 var (
-	port   = os.Getenv("PORT")
-	secret = []byte(os.Getenv("GH_HOOK_SECRET"))
+	port    = os.Getenv("PORT")
+	secret  = []byte(os.Getenv("GH_HOOK_SECRET"))
+	feedUrl = os.Getenv("XML_FEED_URL")
 )
 
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
@@ -35,21 +36,31 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 
 	switch e := event.(type) {
 	case *github.PageBuildEvent:
-		buildError := e.Build.GetError()
-		buildErrorMessage := ""
+		switch buildStatus := e.Build.GetStatus(); buildStatus {
+		case "built":
+			log.Println("[DEBUG] received successful page build event, reading feed to send emails")
 
-		if buildError != nil {
-			buildErrorMessage = buildError.GetMessage()
+			// Build was successful, so get the newest post and send email via MailGun
+		case "queued":
+			log.Println("[DEBUG] rceived page build event with queued status")
+		case "building":
+			log.Println("[DEBUG] rceived page build event with building status")
+		case "errored":
+			buildError := e.Build.GetError()
+			buildErrorMessage := ""
+
+			if buildError != nil {
+				buildErrorMessage = buildError.GetMessage()
+			}
+
+			if len(buildErrorMessage) > 0 {
+				log.Printf("[WARN] received page build event with error message: %s\n", buildErrorMessage)
+			} else {
+				log.Println("[WARN] received page build event with error status but no error message")
+			}
+		default:
+			log.Printf("[WARN] received page build event with unknown build status: %s\n", buildStatus)
 		}
-
-		if len(buildErrorMessage) > 0 {
-			log.Printf("[WARN] received page build event with error message: %s\n", buildErrorMessage)
-			return
-		}
-
-		log.Printf("[DEBUG] rceived successful page build event with status '%s'. URL: %s\n", e.Build.GetStatus(), e.Build.GetURL())
-
-		// Build was successful, so get the newest post and send email via MailGun
 	default:
 		warningMessage := fmt.Sprintf("unknown event type: %s", github.WebHookType(r))
 
