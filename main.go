@@ -174,9 +174,11 @@ func sendMailNotification() {
 func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	payload, err := github.ValidatePayload(r, secret)
 	if err != nil {
-		log.Printf("[ERROR] error validating request body: %s\n", err)
+		errorMessage := fmt.Sprintf("error validating request body: %s", err)
 
-		http.Error(w, "error validating request body", http.StatusBadRequest)
+		log.Printf("[ERROR] " + errorMessage + "\n")
+
+		http.Error(w, errorMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -184,9 +186,11 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 
 	event, err := github.ParseWebHook(github.WebHookType(r), payload)
 	if err != nil {
-		log.Printf("[ERROR] could not parse webhook: %s\n", err)
+		errorMessage := fmt.Sprintf("could not parse webhook: %s", err)
 
-		http.Error(w, "error parsing webhook content", http.StatusBadRequest)
+		log.Printf("[ERROR] " + errorMessage + "\n")
+
+		http.Error(w, errorMessage, http.StatusBadRequest)
 		return
 	}
 
@@ -211,7 +215,7 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if len(buildErrorMessage) > 0 {
-				log.Printf("[WARN] received page build event with error message: %s\n", buildErrorMessage)
+				log.Printf("[WARN] received page build event with error message: %s\n")
 			} else {
 				log.Println("[WARN] received page build event with error status but no error message")
 			}
@@ -221,7 +225,7 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	default:
 		warningMessage := fmt.Sprintf("unknown event type: %s", github.WebHookType(r))
 
-		log.Printf("[WARN] "+warningMessage+"\n", github.WebHookType(r))
+		log.Printf("[WARN] " + warningMessage + "\n")
 
 		http.Error(w, warningMessage, http.StatusNotImplemented)
 		return
