@@ -1,12 +1,16 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/google/go-github/github"
+	"github.com/mmcdole/gofeed"
 	"gopkg.in/mailgun/mailgun-go.v1"
 )
 
@@ -26,17 +30,125 @@ Unsubscribe from MyBB blog updates: %mailing_list_unsubscribe_url%`
 </div>`
 )
 
+type NewBlogPost struct {
+	Title       string
+	Summary     string
+	Url         string
+	PublishedAt time.Time
+	Author      string
+}
+
+func getEnv(key, fallback string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+
+	return fallback
+}
+
+func envOrFail(key, message string) string {
+	if value, ok := os.LookupEnv(key); ok {
+		return value
+	}
+
+	panic(errors.New(message))
+}
+
 var (
-	port                      = os.Getenv("PORT")
-	secret                    = []byte(os.Getenv("GH_HOOK_SECRET"))
-	mailGunDomain             = os.Getenv("MG_DOMAIN")
-	mailGunApiKey             = os.Getenv("MG_API_KEY")
-	mailGunPublicKey          = os.Getenv("MG_PUBLIC_API_KEY")
-	mailGunMailingListAddress = os.Getenv("MG_MAILING_LIST_ADDRESS")
+	port                      = getEnv("BLOG_MAILER_HTTP_PORT", "80")
+	secret                    = []byte(getEnv("BLOG_MAILER_GH_HOOK_SECRET", ""))
+	mailGunDomain             = envOrFail("BLOG_MAILER_MG_DOMAIN", "MailGun domain is required - please set the 'BLOG_MAILER_MG_DOMAIN' environment variable")
+	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "MailGun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
+	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "MailGun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
+	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "MailGun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
+	xmlFeedUrl                = envOrFail("BLOG_MAILER_XML_FEED_URL", "XML feed URL is required - please set the 'BLOG_MAILER_XML_FEED_URL' environment variable")
+	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
+
+	httpClient = &http.Client{
+		Timeout: time.Second * 5,
+	}
 )
 
+func getLastPostDate() (*time.Time, error) {
+	fileContent, err := ioutil.ReadFile(lastPostFilePath)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(fileContent) == 0 {
+		return nil, nil
+	}
+
+	parsedTime, err := time.Parse(time.RFC3339, string(fileContent))
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsedTime, nil
+}
+
+func tryGetNewPost() (*NewBlogPost, error) {
+	resp, err := httpClient.Get(xmlFeedUrl)
+
+	if err != nil {
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	feedParser := gofeed.NewParser()
+
+	feed, err := feedParser.Parse(resp.Body)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if len(feed.Items) == 0 {
+		return nil, nil
+	}
+
+	lastPostDate, err := getLastPostDate()
+
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	// We only check the most recent post
+
+	mostRecentPost := feed.Items[0]
+
+	if mostRecentPost.PublishedParsed == nil || !mostRecentPost.PublishedParsed.After(*lastPostDate) {
+		return nil, nil
+	}
+
+	author := ""
+
+	if mostRecentPost.Author != nil {
+		author = mostRecentPost.Author.Name
+	}
+
+	return &NewBlogPost{
+		Title:       mostRecentPost.Title,
+		Summary:     mostRecentPost.Description,
+		Url:         mostRecentPost.Link,
+		PublishedAt: *mostRecentPost.PublishedParsed,
+		Author:      author,
+	}, nil
+}
+
 func sendMailNotification() {
-	// TODO: Get the most recent post from the XML feed, and check if we've already sent a message for it. If so, don't send an email
+	_, err := tryGetNewPost()
+
+	if err != nil {
+		log.Printf("[ERROR] unable to get new blog post: %s\n", err)
+
+		return
+	}
+
+	// TODO: Populate template with details of new blog post
 
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
@@ -54,6 +166,8 @@ func sendMailNotification() {
 		log.Printf("[ERROR] unable to send update email: %s\n", err)
 	} else {
 		log.Printf("[DEBUG] sent email with id %s and status: %s\n", id, resp)
+
+		// TODO: save the details of the newBlogPost
 	}
 }
 
