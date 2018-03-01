@@ -1,8 +1,10 @@
 package main
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"html/template"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -12,22 +14,6 @@ import (
 	"github.com/google/go-github/github"
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/mailgun/mailgun-go.v1"
-)
-
-const (
-	emailContentPlain = `Hi, %recipient_email%
-
-There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).
-
-Unsubscribe from MyBB blog updates: %mailing_list_unsubscribe_url%`
-
-	emailContentHtml = `<div class="container">
-	<p>Hi, <stong>%recipient_email%</strong></p>
-
-	<p>There has been a new entry posted on the MyBB blog. Pleas click here to view it (TODO).</p>
-
-	<p class="footer"><a class="btn btn--unsubscribe" href="%mailing_list_unsubscribe_url%">Unsubscribe from MyBB blog updates</a></p>
-</div>`
 )
 
 type NewBlogPost struct {
@@ -67,6 +53,8 @@ var (
 	httpClient = &http.Client{
 		Timeout: time.Second * 5,
 	}
+
+	templates = template.Must(template.ParseFiles("templates/email.tmpl", "templates/email.html"))
 )
 
 func getLastPostDate() (*time.Time, error) {
@@ -140,7 +128,7 @@ func tryGetNewPost() (*NewBlogPost, error) {
 }
 
 func sendMailNotification() {
-	_, err := tryGetNewPost()
+	newBlogPost, err := tryGetNewPost()
 
 	if err != nil {
 		log.Printf("[ERROR] unable to get new blog post: %s\n", err)
@@ -150,15 +138,35 @@ func sendMailNotification() {
 
 	// TODO: Populate template with details of new blog post
 
+	var plainTextContentBuffer bytes.Buffer
+
+	err = templates.ExecuteTemplate(&plainTextContentBuffer, "templates/email.tmpl", newBlogPost)
+
+	if err != nil {
+		log.Printf("[ERROR] unable to create plaintext email content: %s\n", err)
+
+		return
+	}
+
+	var htmlContentBuffer bytes.Buffer
+
+	err = templates.ExecuteTemplate(&htmlContentBuffer, "templates/email.html", newBlogPost)
+
+	if err != nil {
+		log.Printf("[ERROR] unable to create HTML email content: %s\n", err)
+
+		return
+	}
+
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
 	message := mg.NewMessage(
 		mailGunMailingListAddress,
-		"New MyBB Blog Post",
-		emailContentPlain,
+		"New MyBB Blog Post: "+newBlogPost.Title,
+		plainTextContentBuffer.String(),
 		mailGunMailingListAddress)
 
-	message.SetHtml(emailContentHtml)
+	message.SetHtml(htmlContentBuffer.String())
 	message.AddHeader("List-Unsubscribe", "%unsubscribe_email%")
 
 	resp, id, err := mg.Send(message)

@@ -1,0 +1,15 @@
+<article class="post">
+	<header class="post__header">
+		<h1 class="post__title">{{ .Subject }}</h1>
+		<span class="post__author">Posted by: {{ .Author }}</span>
+	</header>
+
+	<div class="post__summary">
+		{{ .Summary }}
+	</div>
+
+	<footer class="post__footer">
+		<a class="btn btn--show" href="{{ .Url }}">Read the full post</a>
+		<a class="btn btn--unsubscribe" href="%mailing_list_unsubscribe_url%">Unsubscribe from MyBB blog updates</a>
+	</footer>
+</div>
