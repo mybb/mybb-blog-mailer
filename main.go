@@ -108,7 +108,7 @@ func tryGetNewPost() (*NewBlogPost, error) {
 
 	mostRecentPost := feed.Items[0]
 
-	if mostRecentPost.PublishedParsed == nil || !mostRecentPost.PublishedParsed.After(*lastPostDate) {
+	if lastPostDate != nil && (mostRecentPost.PublishedParsed == nil || !mostRecentPost.PublishedParsed.After(*lastPostDate)) {
 		return nil, nil
 	}
 
@@ -135,8 +135,6 @@ func sendMailNotification() {
 
 		return
 	}
-
-	// TODO: Populate template with details of new blog post
 
 	var plainTextContentBuffer bytes.Buffer
 
@@ -175,7 +173,13 @@ func sendMailNotification() {
 	} else {
 		log.Printf("[DEBUG] sent email with id %s and status: %s\n", id, resp)
 
-		// TODO: save the details of the newBlogPost
+		lastPostDate := newBlogPost.PublishedAt.Format(time.RFC3339)
+
+		err = ioutil.WriteFile(lastPostFilePath, []byte(lastPostDate), 0644)
+
+		if err != nil {
+			log.Printf("[WARN] unable to save last post date '%s': %s\n", lastPostDate, err)
+		}
 	}
 }
 
