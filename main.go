@@ -207,6 +207,8 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	}
 
 	switch e := event.(type) {
+	case *github.PingEvent:
+		log.Println("[DEBUG] received ping event")
 	case *github.PageBuildEvent:
 		switch buildStatus := e.Build.GetStatus(); buildStatus {
 		case "built":

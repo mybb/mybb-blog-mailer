@@ -3,14 +3,15 @@ FROM alpine:3.6
 WORKDIR /app
 
 COPY mybb-blog-mailer-linux-amd64 /app/mybb-blog-mailer
+COPY templates/* /app/templates/
 
 # These arguments can be specified when building the container, using the `--build-arg` flag
+ARG mailgun_api_key
+ARG mailgun_public_api_key
+ARG mailing_list_address
+ARG hook_secret
 ARG mailgun_domain=mybb.com
-ARG mailgun_api_key=
-ARG mailgun_public_api_key=
-ARG mailing_list_address=
 ARG http_port=80
-ARG hook_secret=
 ARG xml_feed_url=https://blog.mybb.com/feed.xml
 
 # Expose the port we're listening on
