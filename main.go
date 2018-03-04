@@ -138,7 +138,7 @@ func sendMailNotification() {
 
 	var plainTextContentBuffer bytes.Buffer
 
-	err = templates.ExecuteTemplate(&plainTextContentBuffer, "templates/email.tmpl", newBlogPost)
+	err = templates.ExecuteTemplate(&plainTextContentBuffer, "email.tmpl", newBlogPost)
 
 	if err != nil {
 		log.Printf("[ERROR] unable to create plaintext email content: %s\n", err)
@@ -148,7 +148,7 @@ func sendMailNotification() {
 
 	var htmlContentBuffer bytes.Buffer
 
-	err = templates.ExecuteTemplate(&htmlContentBuffer, "templates/email.html", newBlogPost)
+	err = templates.ExecuteTemplate(&htmlContentBuffer, "email.html", newBlogPost)
 
 	if err != nil {
 		log.Printf("[ERROR] unable to create HTML email content: %s\n", err)

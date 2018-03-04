@@ -1,5 +1,8 @@
 FROM alpine:3.6
 
+# We need CA certificates to interact with Mailgun
+RUN apk add --update ca-certificates
+
 WORKDIR /app
 
 COPY mybb-blog-mailer-linux-amd64 /app/mybb-blog-mailer
