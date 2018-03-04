@@ -47,7 +47,7 @@ var (
 	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "MailGun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
 	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "MailGun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
 	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "MailGun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
-	xmlFeedUrl                = envOrFail("BLOG_MAILER_XML_FEED_URL", "XML feed URL is required - please set the 'BLOG_MAILER_XML_FEED_URL' environment variable")
+	xmlFeedUrl                = getEnv("BLOG_MAILER_XML_FEED_URL", "https://blog.mybb.com/feed.xml")
 	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
 
 	httpClient = &http.Client{
