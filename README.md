@@ -16,6 +16,7 @@ Configuration is done via a set of environment variables:
 - `BLOG_MAILER_GH_HOOK_SECRET` - the secret used for the GitHub web hook - defaults to an empty string. This should be configured to a secret value to ensure only legitimate requests are processed.
 - `BLOG_MAILER_XML_FEED_URL` - the URL of the XML feed to read blog posts from. Defaults to `https://blog.mybb.com/feed.xml`.
 - `BLOG_MAILER_LAST_POST_FILE_PATH` - the path to the file to store the date of the last sent email in. Defaults to `./last_blog_post.txt`.
+- `BLOG_MAILER_FROM_NAME` - the name to use when sending emails. Defaults to `MyBB Blog`.
 
 ## Building
 

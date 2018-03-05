@@ -50,6 +50,7 @@ var (
 	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "MailGun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
 	xmlFeedUrl                = getEnv("BLOG_MAILER_XML_FEED_URL", "https://blog.mybb.com/feed.xml")
 	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
+	emailFromName             = getEnv("BLOG_MAILER_FROM_NAME", "MyBB Blog")
 
 	httpClient = &http.Client{
 		Timeout: time.Second * 5,
@@ -174,8 +175,14 @@ func sendMailNotification() {
 
 	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
 
+	fromAddress := mailGunMailingListAddress
+
+	if len(emailFromName) > 0 {
+		fromAddress = fmt.Sprintf("%s <%s>", emailFromName, mailGunMailingListAddress)
+	}
+
 	message := mg.NewMessage(
-		mailGunMailingListAddress,
+		fromAddress,
 		"New MyBB Blog Post: "+newBlogPost.Title,
 		plainTextContentBuffer.String(),
 		mailGunMailingListAddress)
