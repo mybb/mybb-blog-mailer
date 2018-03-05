@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/google/go-github/github"
+	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/mailgun/mailgun-go.v1"
 )
@@ -54,7 +55,14 @@ var (
 		Timeout: time.Second * 5,
 	}
 
-	templates = template.Must(template.ParseFiles("templates/email.tmpl", "templates/email.html"))
+	templates = template.Must(template.New("").Funcs(template.FuncMap{
+		"toPlainText": func(target string) string {
+			return bluemonday.StrictPolicy().Sanitize(target)
+		},
+		"stripUnsafeTags": func(target string) string {
+			return bluemonday.UGCPolicy().Sanitize(target)
+		},
+	}).ParseFiles("templates/email.tmpl", "templates/email.html"))
 )
 
 func getLastPostDate() (*time.Time, error) {

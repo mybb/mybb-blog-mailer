@@ -25,6 +25,12 @@
   revision = "53e6ce116135b80d037921a7fdd5138cf32d7a8a"
 
 [[projects]]
+  branch = "master"
+  name = "github.com/microcosm-cc/bluemonday"
+  packages = ["."]
+  revision = "542fd4642604d0d0c26112396ce5b1a9d01eee0b"
+
+[[projects]]
   name = "github.com/mmcdole/gofeed"
   packages = [
     ".",
@@ -90,6 +96,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "66de525db0c94b4e254b0d6d780eb5e894825ffef796964c500d0fa0f6d94278"
+  inputs-digest = "faeebb836470361ae77332edebefbf445c976cc25d053af25dada934d533e707"
   solver-name = "gps-cdcl"
   solver-version = 1
