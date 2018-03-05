@@ -136,6 +136,14 @@ func sendMailNotification() {
 		return
 	}
 
+	if newBlogPost == nil {
+		log.Println("[DEBUG] no new blog post found")
+
+		return
+	} else {
+		log.Printf("[DEBUG] found new blog post: %+v\n", *newBlogPost)
+	}
+
 	var plainTextContentBuffer bytes.Buffer
 
 	err = templates.ExecuteTemplate(&plainTextContentBuffer, "email.tmpl", newBlogPost)
