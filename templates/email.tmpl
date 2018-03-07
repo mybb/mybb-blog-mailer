@@ -1,9 +1,9 @@
 Hi, %recipient_email%
 
-{{ toPlainText(.Author) }} has published a new blog post '{{ toPlainText(.Title) }}':
+{{.Author | toPlainText}} has published a new blog post '{{.Title | toPlainText}}':
 
-{{ toPlainText(.Summary) }}
+{{.Summary | toPlainText}}
 
-You can read the full post here: {{ toPlainText(.Url) }}
+You can read the full post here: {{.Url | toPlainText}}
 
 You can unsubscribe from MyBB blog updates here: %mailing_list_unsubscribe_url%
