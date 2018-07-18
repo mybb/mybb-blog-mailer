@@ -11,15 +11,15 @@ import (
 	"os"
 	"time"
 
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
 	"github.com/google/go-github/github"
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/mailgun/mailgun-go.v1"
-	"encoding/base64"
-	"crypto/aes"
-	"crypto/cipher"
 	"io"
-	"crypto/rand"
 )
 
 type newBlogPost struct {
@@ -63,7 +63,7 @@ var (
 	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "mailgun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
 	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "mailgun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
 	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "mailgun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
-	aesKey = ensureEncryptionKeyLength(envOrFail("BLOG_MAILER_ENCRYPTION_KEY", ""))
+	aesKey                    = ensureEncryptionKeyLength(envOrFail("BLOG_MAILER_ENCRYPTION_KEY", ""))
 	xmlFeedUrl                = getEnv("BLOG_MAILER_XML_FEED_URL", "https://blog.mybb.com/feed.xml")
 	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
 	emailFromName             = getEnv("BLOG_MAILER_FROM_NAME", "MyBB Blog")
