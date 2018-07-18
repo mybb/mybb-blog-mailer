@@ -1,3 +1,3 @@
 vendor/*/
-
-mybb-blog-mailer-*
+bin
+.idea

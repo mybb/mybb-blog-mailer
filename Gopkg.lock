@@ -4,8 +4,8 @@
 [[projects]]
   name = "github.com/PuerkitoBio/goquery"
   packages = ["."]
-  revision = "09540e565986583836b5fc792fe951ec5fd201dd"
-  version = "v1.3.0"
+  revision = "dc2ec5c7ca4d9aae063b79b9f581dd3ea6afd2b2"
+  version = "v1.4.1"
 
 [[projects]]
   name = "github.com/andybalholm/cascadia"
@@ -16,7 +16,8 @@
 [[projects]]
   name = "github.com/google/go-github"
   packages = ["github"]
-  revision = "922ceac0585d40f97d283d921f872fc50480e06e"
+  revision = "e48060a28fac52d0f1cb758bc8b87c07bac4a87d"
+  version = "v15.0.0"
 
 [[projects]]
   branch = "master"
@@ -25,10 +26,10 @@
   revision = "53e6ce116135b80d037921a7fdd5138cf32d7a8a"
 
 [[projects]]
-  branch = "master"
   name = "github.com/microcosm-cc/bluemonday"
   packages = ["."]
-  revision = "542fd4642604d0d0c26112396ce5b1a9d01eee0b"
+  revision = "dafebb5b6ff2861a0d69af64991e10866c19be85"
+  version = "v1.0.0"
 
 [[projects]]
   name = "github.com/mmcdole/gofeed"
@@ -51,7 +52,8 @@
 [[projects]]
   name = "github.com/pkg/errors"
   packages = ["."]
-  revision = "e881fd58d78e04cf6d0de1217f8707c8cc2249bc"
+  revision = "645ef00459ed84a119197bfb8d8205042c6df63d"
+  version = "v0.8.0"
 
 [[projects]]
   branch = "master"
@@ -61,7 +63,7 @@
     "html/atom",
     "html/charset"
   ]
-  revision = "22ae77b79946ea320088417e4d50825671d82d57"
+  revision = "8887df42c721e930089d31b28391090a10a497d7"
 
 [[projects]]
   name = "golang.org/x/text"
@@ -96,6 +98,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "faeebb836470361ae77332edebefbf445c976cc25d053af25dada934d533e707"
+  inputs-digest = "9ef3dae46ebe4da5f55b31d82b72cc46b9d35d69a58f5c5094a6432f52250d19"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -15,9 +15,14 @@ import (
 	"github.com/microcosm-cc/bluemonday"
 	"github.com/mmcdole/gofeed"
 	"gopkg.in/mailgun/mailgun-go.v1"
+	"encoding/base64"
+	"crypto/aes"
+	"crypto/cipher"
+	"io"
+	"crypto/rand"
 )
 
-type NewBlogPost struct {
+type newBlogPost struct {
 	Title       string
 	Summary     string
 	Url         string
@@ -41,13 +46,24 @@ func envOrFail(key, message string) string {
 	panic(errors.New(message))
 }
 
+func ensureEncryptionKeyLength(key string) []byte {
+	keyBytes := []byte(key)
+
+	if len(keyBytes) != 32 {
+		panic(fmt.Errorf("invalid encryption key length %d, must be 32 bytes long", len(keyBytes)))
+	}
+
+	return keyBytes
+}
+
 var (
 	port                      = getEnv("BLOG_MAILER_HTTP_PORT", "80")
 	secret                    = []byte(getEnv("BLOG_MAILER_GH_HOOK_SECRET", ""))
-	mailGunDomain             = envOrFail("BLOG_MAILER_MG_DOMAIN", "MailGun domain is required - please set the 'BLOG_MAILER_MG_DOMAIN' environment variable")
-	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "MailGun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
-	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "MailGun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
-	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "MailGun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
+	mailGunDomain             = envOrFail("BLOG_MAILER_MG_DOMAIN", "mailgun domain is required - please set the 'BLOG_MAILER_MG_DOMAIN' environment variable")
+	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "mailgun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
+	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "mailgun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
+	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "mailgun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
+	aesKey = ensureEncryptionKeyLength(envOrFail("BLOG_MAILER_ENCRYPTION_KEY", ""))
 	xmlFeedUrl                = getEnv("BLOG_MAILER_XML_FEED_URL", "https://blog.mybb.com/feed.xml")
 	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
 	emailFromName             = getEnv("BLOG_MAILER_FROM_NAME", "MyBB Blog")
@@ -63,7 +79,7 @@ var (
 		"stripUnsafeTags": func(target string) string {
 			return bluemonday.UGCPolicy().Sanitize(target)
 		},
-	}).ParseFiles("templates/email.tmpl", "templates/email.html"))
+	}).ParseFiles("templates/email.tmpl", "templates/email.html", "templates/signup.html"))
 )
 
 func getLastPostDate() (*time.Time, error) {
@@ -86,7 +102,7 @@ func getLastPostDate() (*time.Time, error) {
 	return &parsedTime, nil
 }
 
-func tryGetNewPost() (*NewBlogPost, error) {
+func tryGetNewPost() (*newBlogPost, error) {
 	resp, err := httpClient.Get(xmlFeedUrl)
 
 	if err != nil {
@@ -127,7 +143,7 @@ func tryGetNewPost() (*NewBlogPost, error) {
 		author = mostRecentPost.Author.Name
 	}
 
-	return &NewBlogPost{
+	return &newBlogPost{
 		Title:       mostRecentPost.Title,
 		Summary:     mostRecentPost.Description,
 		Url:         mostRecentPost.Link,
@@ -269,8 +285,84 @@ func handleWebHook(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handleSubscribe(writer http.ResponseWriter, request *http.Request) {
+	email, _ := getSubscribeEmail(request)
+	// TODO: If there's an error, show an error page instead...
+
+	if len(email) > 0 {
+		// TODO: Subscribe to mailing list and show success page...
+	}
+
+	templates.ExecuteTemplate(writer, "signup.html", nil)
+}
+
+func getSubscribeEmail(request *http.Request) (string, error) {
+	query := request.URL.Query()
+
+	if keys, ok := query["email"]; !ok || len(keys[0]) < 1 {
+		return "", nil
+	} else {
+		// email is a base64 encoded AES GCM encrypted email address - it is done this way to ensure the request to subscribe was actually confirmed from the confirmation email
+		base64Email := keys[0]
+
+		decodedBytes, err := base64.URLEncoding.DecodeString(base64Email)
+
+		if err != nil {
+			return "", fmt.Errorf("error base64 decoding email: %s", err)
+		}
+
+		decryptedBytes, err := decrypt(decodedBytes)
+
+		if err != nil {
+			return "", fmt.Errorf("error decrypting email: %s", err)
+		}
+
+		return string(decryptedBytes), nil
+	}
+}
+
+func encrypt(text []byte) ([]byte, error) {
+	createdCipher, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(createdCipher)
+	if err != nil {
+		return nil, err
+	}
+
+	nonce := make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, err
+	}
+
+	return gcm.Seal(nonce, nonce, text, nil), nil
+}
+
+func decrypt(encrypted []byte) ([]byte, error) {
+	c, err := aes.NewCipher(aesKey)
+	if err != nil {
+		return nil, err
+	}
+
+	gcm, err := cipher.NewGCM(c)
+	if err != nil {
+		return nil, err
+	}
+
+	nonceSize := gcm.NonceSize()
+	if len(encrypted) < nonceSize {
+		return nil, errors.New("encrypted text too short")
+	}
+
+	nonce, encrypted := encrypted[:nonceSize], encrypted[nonceSize:]
+	return gcm.Open(nil, nonce, encrypted, nil)
+}
+
 func main() {
 	http.HandleFunc("/webhook", handleWebHook)
+	http.HandleFunc("/subscribe", handleSubscribe)
 
 	address := ":" + port
 
