@@ -1,16 +1,16 @@
 package main
 
 import (
+	"flag"
 	"log"
 	"net/http"
-	"runtime"
-	"flag"
 	"os"
+	"runtime"
 	"strconv"
-
 
 	"github.com/gorilla/mux"
 	"github.com/mybb/mybb-blog-mailer/config"
+	"github.com/mybb/mybb-blog-mailer/mail/mailgun"
 )
 
 // init sets basic runtime settings for the application.
@@ -28,7 +28,9 @@ func main() {
 		os.Exit(1)
 	}
 
-	subscriptionService, err := NewSubscriptionService(configuration)
+	mailHandler := mailgun.NewHandler(&configuration.MailGun)
+
+	subscriptionService, err := NewSubscriptionService(mailHandler)
 
 	if err != nil {
 		log.Fatalf("Error initialising subscription service: %s\n", err)

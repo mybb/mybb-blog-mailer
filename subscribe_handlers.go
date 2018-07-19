@@ -3,27 +3,27 @@ package main
 import (
 	"fmt"
 	"html/template"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/gorilla/schema"
 	"github.com/microcosm-cc/bluemonday"
-	"github.com/mybb/mybb-blog-mailer/config"
+
+	"github.com/mybb/mybb-blog-mailer/mail"
 )
 
 type SubscriptionService struct {
-	config     *config.Config
-	templates  *template.Template
-	httpClient *http.Client
-	decoder    *schema.Decoder
+	mailHandler mail.Handler
+	templates   *template.Template
+	httpClient  *http.Client
+	decoder     *schema.Decoder
 }
 
 type subscribeRequest struct {
 	EmailAddress string `schema:"email,required"`
 }
 
-func NewSubscriptionService(config *config.Config) (*SubscriptionService, error) {
+func NewSubscriptionService(mailHandler mail.Handler) (*SubscriptionService, error) {
 	templates, err := template.New("").Funcs(template.FuncMap{
 		"toPlainText": func(target string) string {
 			return bluemonday.StrictPolicy().Sanitize(target)
@@ -38,8 +38,8 @@ func NewSubscriptionService(config *config.Config) (*SubscriptionService, error)
 	}
 
 	return &SubscriptionService{
-		config:    config,
-		templates: templates,
+		mailHandler: mailHandler,
+		templates:   templates,
 		httpClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
@@ -57,8 +57,7 @@ func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Req
 	err := r.ParseForm()
 
 	if err != nil {
-		log.Printf("Error parsing form data for subscribe request: %s\n", err)
-		http.Redirect(w, r, "/", 301)
+		http.Error(w, fmt.Sprintf("Error parsing form data for subscribe request: %s", err), 500)
 		return
 	}
 
@@ -66,10 +65,22 @@ func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Req
 	err = subService.decoder.Decode(&subRequest, r.PostForm)
 
 	if err != nil {
-		log.Printf("Error parsing form data for subscribe request: %s\n", err)
-		http.Redirect(w, r, "/", 301)
+		http.Error(w, fmt.Sprintf("Error parsing form data for subscribe request: %s", err), 500)
 		return
 	}
 
-	// TODO: Validate email with MailGun API, then subscribe the user
+	isValidEmail, err := subService.mailHandler.CheckValidEmail(subRequest.EmailAddress)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error validating email: %s", err), 500)
+		return
+	}
+
+	if !isValidEmail {
+		http.Redirect(w, r, "/", 301)
+		// TODO: Flash message about invalid email?
+		return
+	}
+
+	// TODO: subscribe the user to the mailing list
 }
