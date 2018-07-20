@@ -7,8 +7,12 @@ import (
 	"os"
 	"runtime"
 	"strconv"
+	"crypto/rand"
+	"fmt"
 
 	"github.com/gorilla/mux"
+	"github.com/gorilla/csrf"
+
 	"github.com/mybb/mybb-blog-mailer/config"
 	"github.com/mybb/mybb-blog-mailer/mail/mailgun"
 )
@@ -30,7 +34,7 @@ func main() {
 
 	mailHandler := mailgun.NewHandler(&configuration.MailGun)
 
-	subscriptionService, err := NewSubscriptionService(mailHandler)
+	subscriptionService, err := NewSubscriptionService(mailHandler, configuration.HmacSecret)
 
 	if err != nil {
 		log.Fatalf("Error initialising subscription service: %s\n", err)
@@ -38,7 +42,14 @@ func main() {
 
 	router := newRouter(subscriptionService)
 
-	log.Fatalf("Error running HTTP server: %s\n", http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), router))
+	middlewareStack, err := bindMiddleware(router)
+
+	if err != nil {
+		log.Fatalf("Error binding middlware: %s\n", err)
+	}
+
+	log.Fatalf("Error running HTTP server: %s\n",
+		http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), middlewareStack))
 }
 
 /// newRouter creates and configures a HTTP router to dispatch requests to handlers.
@@ -49,6 +60,32 @@ func newRouter(subscriptionService *SubscriptionService) *mux.Router {
 	router.HandleFunc("/signup", subscriptionService.SignUp).Methods("POST").Name("sign_up")
 
 	return router
+}
+
+/// bindMiddleware wraps a HTTP handleware with the middleware stack.
+func bindMiddleware(handler http.Handler) (http.Handler, error) {
+	csrfAuthKey, err := generateCsrfAuthKey()
+
+	if err != nil {
+		return nil, err
+	}
+
+	csrfMiddleware := csrf.Protect(csrfAuthKey, csrf.Secure(false)) // TODO: Remove secure(false) for production...
+
+	return csrfMiddleware(handler), nil
+}
+
+/// generateCsrfAuthKey generates a 32 byte auth key for use with the CSRF middleware.
+func generateCsrfAuthKey() ([]byte, error) {
+	b := make([]byte, 32)
+
+	_, err := rand.Read(b)
+
+	if err != nil {
+		return nil, fmt.Errorf("error reading random bytes for CSRF auth key: %s", err)
+	}
+
+	return b, nil
 }
 
 //package main

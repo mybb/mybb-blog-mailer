@@ -18,6 +18,8 @@ type MailGunConfig struct {
 	MailingListAddress string
 	/// FromName is the name to show with email notifications sent to the mailing list.
 	FromName string
+	/// EmailValidation determines whether to use MailGun's email validation API. This requires a paid MailGun account.
+	EmailValidation bool
 }
 
 /// Config holds application configuration.
@@ -60,6 +62,8 @@ func InitConfigFromFlags() (*Config, error) {
 		"The email address of the mailing list to send email notifications to")
 	flag.StringVar(&config.MailGun.FromName, "mg-from-name", "MyBB Blog",
 		"The name to show with email notifications sent to the mailing list")
+	flag.BoolVar(&config.MailGun.EmailValidation, "mg-email-validation", false,
+		"Whether to use MailGun's email validation API. This requires a paid MailGun account")
 
 	flag.Parse()
 

@@ -6,24 +6,24 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/gorilla/schema"
 	"github.com/microcosm-cc/bluemonday"
+	"github.com/gorilla/csrf"
 
 	"github.com/mybb/mybb-blog-mailer/mail"
+	"bytes"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/base64"
 )
 
 type SubscriptionService struct {
 	mailHandler mail.Handler
 	templates   *template.Template
 	httpClient  *http.Client
-	decoder     *schema.Decoder
+	hmacSecret string
 }
 
-type subscribeRequest struct {
-	EmailAddress string `schema:"email,required"`
-}
-
-func NewSubscriptionService(mailHandler mail.Handler) (*SubscriptionService, error) {
+func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string) (*SubscriptionService, error) {
 	templates, err := template.New("").Funcs(template.FuncMap{
 		"toPlainText": func(target string) string {
 			return bluemonday.StrictPolicy().Sanitize(target)
@@ -43,13 +43,15 @@ func NewSubscriptionService(mailHandler mail.Handler) (*SubscriptionService, err
 		httpClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
-		decoder: schema.NewDecoder(),
+		hmacSecret: hmacSecret,
 	}, nil
 }
 
 /// Index handles a request to /, showing the sign-up form.
 func (subService *SubscriptionService) Index(w http.ResponseWriter, r *http.Request) {
-	subService.templates.ExecuteTemplate(w, "index.html", nil)
+	subService.templates.ExecuteTemplate(w, "index.html", map[string]interface{}{
+		csrf.TemplateTag: csrf.TemplateField(r),
+	})
 }
 
 /// SignUp handles a POST request to /signup, validating the request and subscribing the user to the mailing list.
@@ -61,15 +63,15 @@ func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	var subRequest subscribeRequest
-	err = subService.decoder.Decode(&subRequest, r.PostForm)
+	emailAddress := r.PostForm.Get("email")
+	name := r.PostForm.Get("name")
 
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing form data for subscribe request: %s", err), 500)
+	if len(emailAddress) == 0 || len(name) == 0 {
+		http.Error(w, "No emaila ddress or name provided", 500)
 		return
 	}
 
-	isValidEmail, err := subService.mailHandler.CheckValidEmail(subRequest.EmailAddress)
+	isValidEmail, err := subService.mailHandler.CheckValidEmail(emailAddress)
 
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error validating email: %s", err), 500)
@@ -82,5 +84,52 @@ func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// TODO: subscribe the user to the mailing list
+	err = subService.sendEmailSubscriptionConfirmation(emailAddress, name)
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error sending confirmation email: %s", err), 500)
+		return
+	}
+}
+
+func (subService *SubscriptionService) sendEmailSubscriptionConfirmation(emailAddress, name string) error {
+	var plainTextContentBuffer bytes.Buffer
+	var htmlContentBuffer bytes.Buffer
+
+	token := subService.generateEmailConfirmationToken(emailAddress, name)
+
+	err := subService.templates.ExecuteTemplate(&plainTextContentBuffer, "confirm_subscription_email.tmpl", map[string]string{
+		"emailAddress": emailAddress,
+		"name": name,
+		"token": token,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	err = subService.templates.ExecuteTemplate(&htmlContentBuffer, "confirm_subscription_email.html", map[string]string{
+		"emailAddress": emailAddress,
+		"name": name,
+		"token": token,
+	})
+
+	if err != nil {
+		return err
+	}
+
+	err = subService.mailHandler.SendSubscriptionConfirmationEmail(emailAddress,
+		plainTextContentBuffer.String(), htmlContentBuffer.String())
+
+	return err
+}
+
+func (subService *SubscriptionService) generateEmailConfirmationToken(emailAddress, name string) string {
+	message := emailAddress + "_" + name
+
+	key := []byte(subService.hmacSecret)
+	h := hmac.New(sha256.New, key)
+	h.Write([]byte(message))
+
+	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }

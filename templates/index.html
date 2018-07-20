@@ -23,6 +23,10 @@
             </header>
             <div class="wrapper">
                 <form method="post" action="/signup">
+                    {{ .csrfField }}
+
+                    <input type="text" placeholder="Please enter your name so we know how to address you"
+                           name="name" required>
                     <input type="email" placeholder="Please enter your email address to start receiving email notifications"
                            name="email" required>
 
