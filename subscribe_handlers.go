@@ -14,6 +14,7 @@ import (
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
+	"crypto/subtle"
 )
 
 type SubscriptionService struct {
@@ -132,4 +133,43 @@ func (subService *SubscriptionService) generateEmailConfirmationToken(emailAddre
 	h.Write([]byte(message))
 
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
+}
+
+func (subService *SubscriptionService) ConfirmSignup(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query()
+
+	emailAddress, ok := query["emailAddress"]
+
+	if !ok || len(emailAddress) == 0 {
+		http.Error(w, "Email address parameter missing", 400)
+		return
+	}
+
+	name, ok := query["name"]
+
+	if !ok || len(name) == 0 {
+		http.Error(w, "Name parameter missing", 400)
+		return
+	}
+
+	token, ok := query["token"]
+
+	if !ok || len(token) == 0 {
+		http.Error(w, "Token parameter missing", 400)
+		return
+	}
+
+	expectedToken := subService.generateEmailConfirmationToken(emailAddress[0], name[0])
+
+	if subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token[0])) != 1 {
+		http.Error(w, "Invalid token", 400)
+		return
+	}
+
+	err := subService.mailHandler.SubscribeEmailToMailingList(emailAddress[0], name[0])
+
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Error subscribing to mailing list: %s", err), 400)
+		return
+	}
 }

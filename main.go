@@ -56,8 +56,10 @@ func main() {
 func newRouter(subscriptionService *SubscriptionService) *mux.Router {
 	router := mux.NewRouter()
 
-	router.HandleFunc("/", subscriptionService.Index).Name("index")
+	router.HandleFunc("/", subscriptionService.Index).Methods("GET").Name("index")
 	router.HandleFunc("/signup", subscriptionService.SignUp).Methods("POST").Name("sign_up")
+	router.HandleFunc("/confirm", subscriptionService.ConfirmSignup).Methods("GET").Name(
+		"confirm_signup")
 
 	return router
 }
