@@ -4,9 +4,10 @@ import (
 	"math"
 	"fmt"
 	"os"
-	"strconv"
-
+	
 	"github.com/joho/godotenv"
+
+	"github.com/mybb/mybb-blog-mailer/helpers"
 )
 
 /// MailGun holds configuration for sending email notifications via MailGun.
@@ -48,51 +49,17 @@ func InitFromEnvironment(dotEnvFile string) (*Config, error) {
 		}
 	}
 
-	var listenPort int
-	setListenPortEnv := false
-	listenPortStr, ok := os.LookupEnv("LISTEN_PORT")
-
-	if !ok || len(listenPortStr) == 0 {
-		listenPort = 8080
-		setListenPortEnv = true
-	} else {
-		if parsedListenPort, err := strconv.Atoi(listenPortStr); err != nil {
-			listenPort = 8080
-			setListenPortEnv = true
-		} else {
-			listenPort = parsedListenPort
-		}
-	}
-
-	if setListenPortEnv {
-		os.Setenv("PORT", strconv.Itoa(listenPort))
-	}
-
-	xmlFeedUrl, ok := os.LookupEnv("XML_FEED_URL")
-	if !ok || len(xmlFeedUrl) == 0 {
-		xmlFeedUrl = "https://blog.mybb.com/feed.xml"
-
-		os.Setenv("XML_FEED_URL", xmlFeedUrl)
-	}
-
-	fromName, ok := os.LookupEnv("EMAIL_FROM_NAME")
-	if !ok || len(fromName) == 0 {
-		fromName = "MyBB Blog"
-
-		os.Setenv("EMAIL_FROM_NAME", fromName)
-	}
-
 	config := &Config{
-		ListenPort: listenPort,
+		ListenPort: helpers.GetIntEnv("PORT", 8080),
 		WebHookSecret: os.Getenv("WEB_HOOK_SECRET"),
-		XmlFeedUrl: xmlFeedUrl,
+		XmlFeedUrl: helpers.GetEnv("XML_FEED_URL", "https://blog.mybb.com/feed.xml"),
 		HmacSecret: os.Getenv("HMAC_SECRET"),
 		MailGun: MailGunConfig{
 			Domain: os.Getenv("MAILGUN_DOMAIN"),
 			ApiKey: os.Getenv("MAILGUN_API_KEY"),
 			PublicKey: os.Getenv("MAILGUN_PUBLIC_KEY"),
 			MailingListAddress: os.Getenv("MAILING_LIST_ADDRESS"),
-			FromName: fromName,
+			FromName: helpers.GetEnv("EMAIL_FROM_NAME", "MyBB Blog"),
 			EmailValidation: os.Getenv("MAILGUN_EMAIL_VALIDATION") == "1",
 		},
 	}
@@ -109,55 +76,55 @@ func InitFromEnvironment(dotEnvFile string) (*Config, error) {
 func (c *Config) validate() error {
 	if c.ListenPort < 1 || c.ListenPort > math.MaxUint16 {
 		return OutOfRangeError{
-			ParameterName: "listen_port",
+			ParameterName: "PORT",
 		}
 	}
 
 	if len(c.WebHookSecret) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "web_hook_secret",
+			ParameterName: "WEB_HOOK_SECRET",
 		}
 	}
 
 	if len(c.XmlFeedUrl) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "xml_feed_url",
+			ParameterName: "XML_FEED_URL",
 		}
 	}
 
 	if len(c.HmacSecret) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "hmac_secret",
+			ParameterName: "HMAC_SECRET",
 		}
 	}
 
 	if len(c.MailGun.Domain) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "domain",
+			ParameterName: "MAILGUN_DOMAIN",
 		}
 	}
 
 	if len(c.MailGun.ApiKey) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "api_key",
+			ParameterName: "MAILGUN_API_KEY",
 		}
 	}
 
 	if len(c.MailGun.PublicKey) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "public_key",
+			ParameterName: "MAILGUN_PUBLIC_KEY",
 		}
 	}
 
 	if len(c.MailGun.MailingListAddress) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "mailing_list",
+			ParameterName: "MAILING_LIST_ADDRESS",
 		}
 	}
 
 	if len(c.MailGun.FromName) == 0 {
 		return RequiredConfigMissingError{
-			ParameterName: "from_name",
+			ParameterName: "EMAIL_FROM_NAME",
 		}
 	}
 

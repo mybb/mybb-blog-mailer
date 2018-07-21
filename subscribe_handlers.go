@@ -15,6 +15,7 @@ import (
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/sessions"
+
 	"github.com/mybb/mybb-blog-mailer/mail"
 	"github.com/mybb/mybb-blog-mailer/templating"
 )

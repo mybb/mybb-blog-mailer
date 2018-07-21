@@ -31,7 +31,7 @@ func main() {
 	storedCsrfKeyFilePath := flag.String("csrf_key_path", "./.csrf_key",
 		"Path to store the CSRF key")
 	storedSessionKeyPath := flag.String("session_key_path", "./.session_key",
-		"Path to store the sesison key")
+		"Path to store the session key")
 
 	flag.Parse()
 
@@ -89,7 +89,14 @@ func newRouter(subscriptionService *SubscriptionService) *mux.Router {
 
 /// bindMiddleware wraps a HTTP handler with a stack of middleware.
 func bindMiddleware(handler http.Handler, csrfkey []byte) http.Handler {
-	csrfMiddleware := csrf.Protect(csrfkey, csrf.Secure(false)) // TODO: Remove secure(false) for production...
+	var secureOption csrf.Option
+	if os.Getenv("DEBUG") == "1" {
+		secureOption = csrf.Secure(false)
+	} else {
+		secureOption = csrf.Secure(true)
+	}
+
+	csrfMiddleware := csrf.Protect(csrfkey, secureOption)
 
 	return csrfMiddleware(handler)
 }
