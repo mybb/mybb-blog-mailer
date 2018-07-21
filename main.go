@@ -15,6 +15,8 @@ import (
 
 	"github.com/mybb/mybb-blog-mailer/config"
 	"github.com/mybb/mybb-blog-mailer/mail/mailgun"
+	"io/ioutil"
+	"encoding/base64"
 )
 
 // init sets basic runtime settings for the application.
@@ -24,11 +26,16 @@ func init() {
 }
 
 func main() {
-	configFilePath := flag.String("config", "./config.toml", "The path to the configuration file")
+	configFilePath := flag.String("config", "./.env",
+		"Optional path to a .env configuration file")
+	storedCsrfKeyFilePath := flag.String("csrf_key_path", "./.csrf_key",
+		"Path to store the CSRF key")
+	storedSessionKeyPath := flag.String("session_key_path", "./.session_key",
+		"Path to store the sesison key")
 
 	flag.Parse()
 
-	configuration, err := config.InitConfigFromConfigFile(*configFilePath)
+	configuration, err := config.InitFromEnvironment(*configFilePath)
 
 	if err != nil {
 		log.Printf("[ERROR] initialising configuration: %s\n", err)
@@ -36,9 +43,16 @@ func main() {
 		os.Exit(1)
 	}
 
+	sessionKey, err := readOrGenerateKey(*storedSessionKeyPath)
+
+	if err != nil {
+		log.Fatalf("[ERROR] reading or generating session key: %s\n", err)
+	}
+
 	mailHandler := mailgun.NewHandler(&configuration.MailGun)
 
-	subscriptionService, err := NewSubscriptionService(mailHandler, configuration.HmacSecret)
+	subscriptionService, err := NewSubscriptionService(mailHandler, configuration.HmacSecret,
+		sessionKey)
 
 	if err != nil {
 		log.Fatalf("[ERROR] initialising subscription service: %s\n", err)
@@ -46,15 +60,15 @@ func main() {
 
 	router := newRouter(subscriptionService)
 
-	middlewareStack, err := bindMiddleware(router)
+	csrfKey, err := readOrGenerateKey(*storedCsrfKeyFilePath)
 
 	if err != nil {
-		log.Fatalf("[ERROR] binding middlware: %s\n", err)
+		log.Fatalf("[ERROR] reading or generating CSRF key: %s\n", err)
 	}
 
 	log.Printf("[DEBUG] starting HTTP server on :%d\n", configuration.ListenPort)
 
-	err = http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), middlewareStack)
+	err = http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), bindMiddleware(router, csrfKey))
 
 	if err != nil {
 		log.Fatalf("[ERROR] running HTTP server: %s\n", err)
@@ -74,26 +88,34 @@ func newRouter(subscriptionService *SubscriptionService) *mux.Router {
 }
 
 /// bindMiddleware wraps a HTTP handler with a stack of middleware.
-func bindMiddleware(handler http.Handler) (http.Handler, error) {
-	csrfAuthKey, err := generateCsrfAuthKey()
+func bindMiddleware(handler http.Handler, csrfkey []byte) http.Handler {
+	csrfMiddleware := csrf.Protect(csrfkey, csrf.Secure(false)) // TODO: Remove secure(false) for production...
 
-	if err != nil {
-		return nil, err
-	}
-
-	csrfMiddleware := csrf.Protect(csrfAuthKey, csrf.Secure(false)) // TODO: Remove secure(false) for production...
-
-	return csrfMiddleware(handler), nil
+	return csrfMiddleware(handler)
 }
 
-/// generateCsrfAuthKey generates a 32 byte auth key for use with the CSRF middleware.
-func generateCsrfAuthKey() ([]byte, error) {
+/// readOrGenerateKey reads a 32 byte key from a base64 encoded file, or generates a new key f the file doesn't exist or is empty.
+func readOrGenerateKey(keyFilePath string) ([]byte, error) {
+	if len(keyFilePath) > 0 {
+		if storedKey, err := ioutil.ReadFile(keyFilePath); err == nil {
+			if base64Decoded, err := base64.StdEncoding.DecodeString(string(storedKey));
+			err == nil && len(base64Decoded) == 32 {
+				return base64Decoded, nil
+			}
+		}
+	}
+
 	b := make([]byte, 32)
 
 	_, err := rand.Read(b)
 
 	if err != nil {
 		return nil, fmt.Errorf("error reading random bytes for CSRF auth key: %s", err)
+	}
+
+	if len(keyFilePath) > 0 {
+		b64 := base64.StdEncoding.EncodeToString(b)
+		ioutil.WriteFile(keyFilePath, []byte(b64), 0644)
 	}
 
 	return b, nil

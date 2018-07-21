@@ -15,8 +15,6 @@ import (
 
 	"github.com/gorilla/csrf"
 	"github.com/gorilla/sessions"
-	"github.com/gorilla/securecookie"
-
 	"github.com/mybb/mybb-blog-mailer/mail"
 	"github.com/mybb/mybb-blog-mailer/templating"
 )
@@ -31,7 +29,7 @@ type SubscriptionService struct {
 
 type FlashMessages map[string]string
 
-func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string) (*SubscriptionService, error) {
+func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string, sessionKey []byte) (*SubscriptionService, error) {
 	templates, err := templating.FindAndParseTemplates("./templates", templating.BuildDefaultFunctionMap())
 
 	if err != nil {
@@ -46,7 +44,7 @@ func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string) (*Subsc
 		httpClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
-		sessionStore: sessions.NewCookieStore(securecookie.GenerateRandomKey(32)), // TODO: do not hardcode session key
+		sessionStore: sessions.NewCookieStore(sessionKey),
 		hmacSecret: hmacSecret,
 	}, nil
 }

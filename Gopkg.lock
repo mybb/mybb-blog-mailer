@@ -38,16 +38,16 @@
   revision = "0bae9679d4e31a54efa4b1cc61dd78eadda83b1a"
 
 [[projects]]
+  name = "github.com/joho/godotenv"
+  packages = ["."]
+  revision = "a79fa1e548e2c689c241d10173efd51e5d689d5b"
+  version = "v1.2.0"
+
+[[projects]]
   name = "github.com/microcosm-cc/bluemonday"
   packages = ["."]
   revision = "dafebb5b6ff2861a0d69af64991e10866c19be85"
   version = "v1.0.0"
-
-[[projects]]
-  name = "github.com/pelletier/go-toml"
-  packages = ["."]
-  revision = "c01d1270ff3e442a8a57cddc1c92dc1138598194"
-  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -73,6 +73,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "bc328df826cc1ed4f19149d11910409957073273c4cdfe8ca7b80ced1c074e19"
+  inputs-digest = "f219218663e2d33bd5cdd24c792bf917b2f700134e3376ed2bd11b9d94981926"
   solver-name = "gps-cdcl"
   solver-version = 1

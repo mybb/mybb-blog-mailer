@@ -2,71 +2,108 @@ package config
 
 import (
 	"math"
-	"github.com/pelletier/go-toml"
-	"io/ioutil"
 	"fmt"
+	"os"
+	"strconv"
+
+	"github.com/joho/godotenv"
 )
 
 /// MailGun holds configuration for sending email notifications via MailGun.
 type MailGunConfig struct {
 	/// Domain is the domain name configured with MailGun to send emails from.
-	Domain string `toml:"domain"`
+	Domain string
 	/// ApiKey is the API key provided by MailGun to communicate with their API.
-	ApiKey string `toml:"api_key"`
+	ApiKey string
 	/// PublicKey is the public key provided by MailGun to communicate with their API.
-	PublicKey string `toml:"public_key"`
+	PublicKey string
 	/// MailingListAddress is the email address of the mailing list to send email notifications to.
-	MailingListAddress string `toml:"mailing_list"`
+	MailingListAddress string
 	/// FromName is the name to show with email notifications sent to the mailing list.
-	FromName string `toml:"from_name"`
+	FromName string
 	/// EmailValidation determines whether to use MailGun's email validation API. This requires a paid MailGun account.
-	EmailValidation bool `toml:"email_validation"`
+	EmailValidation bool
 }
 
 /// Config holds application configuration.
 type Config struct {
 	/// ListenPort is the TCP port to listen for HTTP requests on.
-	ListenPort int `toml:"listen_port"`
+	ListenPort int
 	/// WebHookSecret is a secret configured with the GitHub webhook to verify requests originate from GitHub.
-	WebHookSecret string `toml:"web_hook_secret"`
+	WebHookSecret string
 	/// XmlFeedUrl is the URL to check for blog posts for a successful GitHub pages build.
-	XmlFeedUrl string `toml:"xml_feed_url"`
+	XmlFeedUrl string
 	/// HmacSecret is the secret phrase used when signing an email during email verification to ensure authenticity.
-	HmacSecret string `toml:"hmac_secret"`
+	HmacSecret string
 	/// MailGun is the configuration related to sending email notifications via MailGun.
-	MailGun MailGunConfig `toml:"mailgun"`
+	MailGun MailGunConfig
 }
 
-/// InitConfigFromConfigFile reads and parses a config file into a config structure.
-func InitConfigFromConfigFile(filePath string) (*Config, error) {
-	config := Config{
-		ListenPort: 80,
-		XmlFeedUrl: "https://blog.mybb.com/feed.xml",
+func InitFromEnvironment(dotEnvFile string) (*Config, error) {
+	if len(dotEnvFile) > 0 {
+		err := godotenv.Load(dotEnvFile)
+
+		if err != nil {
+			return nil, fmt.Errorf("error loading .env file: %s", err)
+		}
+	}
+
+	var listenPort int
+	setListenPortEnv := false
+	listenPortStr, ok := os.LookupEnv("LISTEN_PORT")
+
+	if !ok || len(listenPortStr) == 0 {
+		listenPort = 8080
+		setListenPortEnv = true
+	} else {
+		if parsedListenPort, err := strconv.Atoi(listenPortStr); err != nil {
+			listenPort = 8080
+			setListenPortEnv = true
+		} else {
+			listenPort = parsedListenPort
+		}
+	}
+
+	if setListenPortEnv {
+		os.Setenv("PORT", strconv.Itoa(listenPort))
+	}
+
+	xmlFeedUrl, ok := os.LookupEnv("XML_FEED_URL")
+	if !ok || len(xmlFeedUrl) == 0 {
+		xmlFeedUrl = "https://blog.mybb.com/feed.xml"
+
+		os.Setenv("XML_FEED_URL", xmlFeedUrl)
+	}
+
+	fromName, ok := os.LookupEnv("EMAIL_FROM_NAME")
+	if !ok || len(fromName) == 0 {
+		fromName = "MyBB Blog"
+
+		os.Setenv("EMAIL_FROM_NAME", fromName)
+	}
+
+	config := &Config{
+		ListenPort: listenPort,
+		WebHookSecret: os.Getenv("WEB_HOOK_SECRET"),
+		XmlFeedUrl: xmlFeedUrl,
+		HmacSecret: os.Getenv("HMAC_SECRET"),
 		MailGun: MailGunConfig{
-			FromName: "MyBB Blog",
-			EmailValidation: false,
+			Domain: os.Getenv("MAILGUN_DOMAIN"),
+			ApiKey: os.Getenv("MAILGUN_API_KEY"),
+			PublicKey: os.Getenv("MAILGUN_PUBLIC_KEY"),
+			MailingListAddress: os.Getenv("MAILING_LIST_ADDRESS"),
+			FromName: fromName,
+			EmailValidation: os.Getenv("MAILGUN_EMAIL_VALIDATION") == "1",
 		},
 	}
 
-	configFileContent, err := ioutil.ReadFile(filePath)
-
-	if err != nil {
-		return nil, fmt.Errorf("error reading config file '%s': %s", filePath, err)
-	}
-
-	err = toml.Unmarshal(configFileContent, &config)
-
-	if err != nil {
-		return nil, fmt.Errorf("error parsing config file '%s': %s", filePath, err)
-	}
-
-	err = config.validate()
+	err := config.validate()
 
 	if err != nil {
 		return nil, err
 	}
 
-	return &config, nil
+	return config, nil
 }
 
 func (c *Config) validate() error {
