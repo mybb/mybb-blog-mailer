@@ -1,36 +1,40 @@
-FROM alpine:3.6
+# build container to build the app
+FROM golang:alpine AS build
 
-# We need CA certificates to interact with Mailgun
-RUN apk add --update ca-certificates
+# need git to install dep
+RUN apk add --no-cache git
+
+WORKDIR /go/src/github.com/mybb/mybb-blog-mailer
+
+ADD . /go/src/github.com/mybb/mybb-blog-mailer
+
+RUN cd /go/src/github.com/mybb/mybb-blog-mailer && \
+    go get -u github.com/golang/dep/cmd/dep && \
+    dep ensure && \
+    go build -o mybb-blog-mailer
+
+# runtime container
+FROM alpine
+
+# need CA certificates to interact with Mailgun
+RUN apk add --no-cache ca-certificates
 
 WORKDIR /app
 
-COPY mybb-blog-mailer-linux-amd64 /app/mybb-blog-mailer
-COPY templates/* /app/templates/
+COPY --from=build /go/src/github.com/mybb/mybb-blog-mailer/mybb-blog-mailer .
+COPY --from=build /go/src/github.com/mybb/mybb-blog-mailer/templates ./templates
 
-# These arguments can be specified when building the container, using the `--build-arg` flag
-ARG mailgun_api_key
-ARG mailgun_public_api_key
-ARG mailing_list_address
-ARG hook_secret
-ARG mailgun_domain=mybb.com
-ARG http_port=80
-ARG xml_feed_url=https://blog.mybb.com/feed.xml
+# set the listen port to 80 by default
+ENV PORT=80
 
 # Expose the port we're listening on
-EXPOSE $http_port
+EXPOSE $PORT
 
 # We define a volume to keep the last blog post file in
-VOLUME ["/var/log/mybb-blog-mailer"]
+VOLUME [ "/var/log/mybb-blog-mailer" ]
 
-# We set the required environment variables based on the build args
-ENV BLOG_MAILER_MG_DOMAIN=$mailgun_domain
-ENV BLOG_MAILER_MG_API_KEY=$mailgun_api_key
-ENV BLOG_MAILER_MG_PUBLIC_API_KEY=$mailgun_public_api_key
-ENV BLOG_MAILER_MG_MAILING_LIST_ADDRESS=$mailing_list_address
-ENV BLOG_MAILER_HTTP_PORT=$http_port
-ENV BLOG_MAILER_GH_HOOK_SECRET=$hook_secret
-ENV BLOG_MAILER_XML_FEED_URL=$xml_feed_url
-ENV BLOG_MAILER_LAST_POST_FILE_PATH /var/log/mybb-blog-mailer/last_blog_post.log
-
-CMD ["/app/mybb-blog-mailer"]
+CMD [ "/app/mybb-blog-mailer", \
+    "-config=", \
+    "-csrf_key_path=/var/log/mybb-blog-mailer/csrf_key", \
+    "-session_key_path=/var/log/mybb-blog-mailer/session_key", \
+    "-last_post_path=/var/log/mybb-blog-mailer/last_post_date" ]
