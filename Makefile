@@ -1,4 +1,4 @@
-BINARY = mybb-blog-mailer
+BINARY = ./bin/mybb-blog-mailer
 GOARCH = amd64
 
 all: clean linux darwin windows

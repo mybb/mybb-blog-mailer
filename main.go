@@ -1,280 +1,138 @@
 package main
 
 import (
-	"bytes"
-	"errors"
-	"fmt"
-	"html/template"
-	"io/ioutil"
+	"flag"
 	"log"
 	"net/http"
 	"os"
-	"time"
+	"runtime"
+	"strconv"
+	"crypto/rand"
+	"fmt"
+	"io/ioutil"
+	"encoding/base64"
 
-	"github.com/google/go-github/github"
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/mmcdole/gofeed"
-	"gopkg.in/mailgun/mailgun-go.v1"
+	"github.com/gorilla/mux"
+	"github.com/gorilla/csrf"
+
+	"github.com/mybb/mybb-blog-mailer/config"
+	"github.com/mybb/mybb-blog-mailer/mail/mailgun"
+	"github.com/mybb/mybb-blog-mailer/templating"
 )
 
-type NewBlogPost struct {
-	Title       string
-	Summary     string
-	Url         string
-	PublishedAt time.Time
-	Author      string
-}
-
-func getEnv(key, fallback string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-
-	return fallback
-}
-
-func envOrFail(key, message string) string {
-	if value, ok := os.LookupEnv(key); ok {
-		return value
-	}
-
-	panic(errors.New(message))
-}
-
-var (
-	port                      = getEnv("BLOG_MAILER_HTTP_PORT", "80")
-	secret                    = []byte(getEnv("BLOG_MAILER_GH_HOOK_SECRET", ""))
-	mailGunDomain             = envOrFail("BLOG_MAILER_MG_DOMAIN", "MailGun domain is required - please set the 'BLOG_MAILER_MG_DOMAIN' environment variable")
-	mailGunApiKey             = envOrFail("BLOG_MAILER_MG_API_KEY", "MailGun API key is required - please set the 'BLOG_MAILER_MG_API_KEY' environment variable")
-	mailGunPublicKey          = envOrFail("BLOG_MAILER_MG_PUBLIC_API_KEY", "MailGun public API key is required - please set the 'BLOG_MAILER_MG_PUBLIC_API_KEY' environment variable")
-	mailGunMailingListAddress = envOrFail("BLOG_MAILER_MG_MAILING_LIST_ADDRESS", "MailGun mailing list address is required - please set the 'BLOG_MAILER_MG_MAILING_LIST_ADDRESS' environment variable")
-	xmlFeedUrl                = getEnv("BLOG_MAILER_XML_FEED_URL", "https://blog.mybb.com/feed.xml")
-	lastPostFilePath          = getEnv("BLOG_MAILER_LAST_POST_FILE_PATH", "./last_blog_post.txt")
-	emailFromName             = getEnv("BLOG_MAILER_FROM_NAME", "MyBB Blog")
-
-	httpClient = &http.Client{
-		Timeout: time.Second * 5,
-	}
-
-	templates = template.Must(template.New("").Funcs(template.FuncMap{
-		"toPlainText": func(target string) string {
-			return bluemonday.StrictPolicy().Sanitize(target)
-		},
-		"stripUnsafeTags": func(target string) string {
-			return bluemonday.UGCPolicy().Sanitize(target)
-		},
-	}).ParseFiles("templates/email.tmpl", "templates/email.html"))
-)
-
-func getLastPostDate() (*time.Time, error) {
-	fileContent, err := ioutil.ReadFile(lastPostFilePath)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(fileContent) == 0 {
-		return nil, nil
-	}
-
-	parsedTime, err := time.Parse(time.RFC3339, string(fileContent))
-
-	if err != nil {
-		return nil, err
-	}
-
-	return &parsedTime, nil
-}
-
-func tryGetNewPost() (*NewBlogPost, error) {
-	resp, err := httpClient.Get(xmlFeedUrl)
-
-	if err != nil {
-		return nil, err
-	}
-
-	defer resp.Body.Close()
-
-	feedParser := gofeed.NewParser()
-
-	feed, err := feedParser.Parse(resp.Body)
-
-	if err != nil {
-		return nil, err
-	}
-
-	if len(feed.Items) == 0 {
-		return nil, nil
-	}
-
-	lastPostDate, err := getLastPostDate()
-
-	if err != nil && !os.IsNotExist(err) {
-		return nil, err
-	}
-
-	// We only check the most recent post
-
-	mostRecentPost := feed.Items[0]
-
-	if lastPostDate != nil && (mostRecentPost.PublishedParsed == nil || !mostRecentPost.PublishedParsed.After(*lastPostDate)) {
-		return nil, nil
-	}
-
-	author := ""
-
-	if mostRecentPost.Author != nil {
-		author = mostRecentPost.Author.Name
-	}
-
-	return &NewBlogPost{
-		Title:       mostRecentPost.Title,
-		Summary:     mostRecentPost.Description,
-		Url:         mostRecentPost.Link,
-		PublishedAt: *mostRecentPost.PublishedParsed,
-		Author:      author,
-	}, nil
-}
-
-func sendMailNotification() {
-	newBlogPost, err := tryGetNewPost()
-
-	if err != nil {
-		log.Printf("[ERROR] unable to get new blog post: %s\n", err)
-
-		return
-	}
-
-	if newBlogPost == nil {
-		log.Println("[DEBUG] no new blog post found")
-
-		return
-	} else {
-		log.Printf("[DEBUG] found new blog post: %+v\n", *newBlogPost)
-	}
-
-	var plainTextContentBuffer bytes.Buffer
-
-	err = templates.ExecuteTemplate(&plainTextContentBuffer, "email.tmpl", newBlogPost)
-
-	if err != nil {
-		log.Printf("[ERROR] unable to create plaintext email content: %s\n", err)
-
-		return
-	}
-
-	var htmlContentBuffer bytes.Buffer
-
-	err = templates.ExecuteTemplate(&htmlContentBuffer, "email.html", newBlogPost)
-
-	if err != nil {
-		log.Printf("[ERROR] unable to create HTML email content: %s\n", err)
-
-		return
-	}
-
-	mg := mailgun.NewMailgun(mailGunDomain, mailGunApiKey, mailGunPublicKey)
-
-	fromAddress := mailGunMailingListAddress
-
-	if len(emailFromName) > 0 {
-		fromAddress = fmt.Sprintf("%s <%s>", emailFromName, mailGunMailingListAddress)
-	}
-
-	message := mg.NewMessage(
-		fromAddress,
-		"New MyBB Blog Post: "+newBlogPost.Title,
-		plainTextContentBuffer.String(),
-		mailGunMailingListAddress)
-
-	message.SetHtml(htmlContentBuffer.String())
-	message.AddHeader("List-Unsubscribe", "%unsubscribe_email%")
-
-	resp, id, err := mg.Send(message)
-	if err != nil {
-		log.Printf("[ERROR] unable to send update email: %s\n", err)
-	} else {
-		log.Printf("[DEBUG] sent email with id %s and status: %s\n", id, resp)
-
-		lastPostDate := newBlogPost.PublishedAt.Format(time.RFC3339)
-
-		err = ioutil.WriteFile(lastPostFilePath, []byte(lastPostDate), 0644)
-
-		if err != nil {
-			log.Printf("[WARN] unable to save last post date '%s': %s\n", lastPostDate, err)
-		}
-	}
-}
-
-func handleWebHook(w http.ResponseWriter, r *http.Request) {
-	payload, err := github.ValidatePayload(r, secret)
-	if err != nil {
-		errorMessage := fmt.Sprintf("error validating request body: %s", err)
-
-		log.Printf("[ERROR] " + errorMessage + "\n")
-
-		http.Error(w, errorMessage, http.StatusBadRequest)
-		return
-	}
-
-	defer r.Body.Close()
-
-	event, err := github.ParseWebHook(github.WebHookType(r), payload)
-	if err != nil {
-		errorMessage := fmt.Sprintf("could not parse webhook: %s", err)
-
-		log.Printf("[ERROR] " + errorMessage + "\n")
-
-		http.Error(w, errorMessage, http.StatusBadRequest)
-		return
-	}
-
-	switch e := event.(type) {
-	case *github.PingEvent:
-		log.Println("[DEBUG] received ping event")
-	case *github.PageBuildEvent:
-		switch buildStatus := e.Build.GetStatus(); buildStatus {
-		case "built":
-			log.Println("[DEBUG] received successful page build event, reading feed to send emails")
-
-			// Build was successful, so get the newest post and send email via MailGun
-			sendMailNotification()
-		case "queued":
-			log.Println("[DEBUG] rceived page build event with queued status")
-		case "building":
-			log.Println("[DEBUG] rceived page build event with building status")
-		case "errored":
-			buildError := e.Build.GetError()
-			buildErrorMessage := ""
-
-			if buildError != nil {
-				buildErrorMessage = buildError.GetMessage()
-			}
-
-			if len(buildErrorMessage) > 0 {
-				log.Printf("[WARN] received page build event with error message: %s\n")
-			} else {
-				log.Println("[WARN] received page build event with error status but no error message")
-			}
-		default:
-			log.Printf("[WARN] received page build event with unknown build status: %s\n", buildStatus)
-		}
-	default:
-		warningMessage := fmt.Sprintf("unknown event type: %s", github.WebHookType(r))
-
-		log.Printf("[WARN] " + warningMessage + "\n")
-
-		http.Error(w, warningMessage, http.StatusNotImplemented)
-		return
-	}
+// init sets basic runtime settings for the application.
+func init() {
+	log.SetFlags(log.LstdFlags)
+	runtime.GOMAXPROCS(runtime.NumCPU())
 }
 
 func main() {
-	http.HandleFunc("/webhook", handleWebHook)
+	configFilePath := flag.String("config", "./.env",
+		"Optional path to a .env configuration file")
+	storedCsrfKeyFilePath := flag.String("csrf_key_path", "./.csrf_key",
+		"Path to store the CSRF key")
+	storedSessionKeyPath := flag.String("session_key_path", "./.session_key",
+		"Path to store the session key")
+	lastPostDateFilePath := flag.String("last_post_path", "./last_post_date",
+		"Path to store the date of the last blog post that was sent to subscribers")
 
-	address := ":" + port
+	flag.Parse()
 
-	log.Printf("[DEBUG] starting webhook server: %s", address)
+	configuration, err := config.InitFromEnvironment(*configFilePath)
 
-	log.Fatalln(http.ListenAndServe(address, nil))
+	if err != nil {
+		log.Printf("[ERROR] initialising configuration: %s\n", err)
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	sessionKey, err := readOrGenerateKey(*storedSessionKeyPath)
+
+	if err != nil {
+		log.Fatalf("[ERROR] reading or generating session key: %s\n", err)
+	}
+
+	mailHandler := mailgun.NewHandler(&configuration.MailGun)
+
+	templates, err := templating.FindAndParseTemplates("./templates", templating.BuildDefaultFunctionMap())
+
+	if err != nil {
+		log.Fatalf("[ERROR] reading templates: %s\n", err)
+	}
+
+	subscriptionService := NewSubscriptionService(mailHandler, templates, configuration.HmacSecret,
+		sessionKey)
+	webHookService := NewWebHookService(mailHandler, templates, configuration.WebHookSecret, configuration.XmlFeedUrl,
+		*lastPostDateFilePath)
+
+	router := newRouter(subscriptionService, webHookService)
+
+	csrfKey, err := readOrGenerateKey(*storedCsrfKeyFilePath)
+
+	if err != nil {
+		log.Fatalf("[ERROR] reading or generating CSRF key: %s\n", err)
+	}
+
+	log.Printf("[DEBUG] starting HTTP server on :%d\n", configuration.ListenPort)
+
+	err = http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), bindMiddleware(router, csrfKey))
+
+	if err != nil {
+		log.Fatalf("[ERROR] running HTTP server: %s\n", err)
+	}
+}
+
+/// newRouter creates and configures a HTTP router to dispatch requests to handlers.
+func newRouter(subscriptionService *SubscriptionService, whService *WebHookService) *mux.Router {
+	router := mux.NewRouter()
+
+	router.HandleFunc("/", subscriptionService.Index).Methods("GET").Name("index")
+	router.HandleFunc("/signup", subscriptionService.SignUp).Methods("POST").Name("sign_up")
+	router.HandleFunc("/confirm", subscriptionService.ConfirmSignUp).Methods("GET").Name(
+		"confirm_signup")
+
+	router.HandleFunc("/webhook", whService.Index).Methods("POST").Name("webhook")
+
+	return router
+}
+
+/// bindMiddleware wraps a HTTP handler with a stack of middleware.
+func bindMiddleware(handler http.Handler, csrfkey []byte) http.Handler {
+	var secureOption csrf.Option
+	if os.Getenv("DEBUG") == "1" {
+		secureOption = csrf.Secure(false)
+	} else {
+		secureOption = csrf.Secure(true)
+	}
+
+	csrfMiddleware := csrf.Protect(csrfkey, secureOption)
+
+	return csrfMiddleware(handler)
+}
+
+/// readOrGenerateKey reads a 32 byte key from a base64 encoded file, or generates a new key f the file doesn't exist or is empty.
+func readOrGenerateKey(keyFilePath string) ([]byte, error) {
+	if len(keyFilePath) > 0 {
+		if storedKey, err := ioutil.ReadFile(keyFilePath); err == nil {
+			if base64Decoded, err := base64.StdEncoding.DecodeString(string(storedKey));
+			err == nil && len(base64Decoded) == 32 {
+				return base64Decoded, nil
+			}
+		}
+	}
+
+	b := make([]byte, 32)
+
+	_, err := rand.Read(b)
+
+	if err != nil {
+		return nil, fmt.Errorf("error reading random bytes for CSRF auth key: %s", err)
+	}
+
+	if len(keyFilePath) > 0 {
+		b64 := base64.StdEncoding.EncodeToString(b)
+		ioutil.WriteFile(keyFilePath, []byte(b64), 0644)
+	}
+
+	return b, nil
 }

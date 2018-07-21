@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <title>MyBB Blog Subscription Confirmation</title>
+    <meta name="description" content="Sign up to receive email notification of new posts to the official MyBB Blog.">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <!-- TODO: Serve stylesheet locally -->
+    <link rel="stylesheet" href="https://mybb.github.io/mybb-website-theme/assets/css/main.css">
+</head>
+<body class="section section--home">
+{{ template "partials/header.html" }}
+
+<article class="main main--home">
+    <header class="main-feature">
+        <div class="wrapper">
+            <h1 class="main-feature__page-title">Thanks For Signing Up For MyBB Blog Email Updates</h1>
+
+            <p class="main-feature__description">
+                We've sent an email to <code>{{.emailAddress}}</code>. Please check your inbox to confirm your subscription!
+            </p>
+        </div>
+    </header>
+</article>
+
+<!-- TODO: Analytics tracking -->
+</body>
+</html>
