@@ -11,6 +11,8 @@ type Handler interface {
 	SendSubscriptionConfirmationEmail(emailAddress string, textContent, htmlContent string) error
 	/// Subscribe the given email address to the mailing list with the given name.
 	SubscribeEmailToMailingList(emailAddress, name string) error
+	/// SendNotificationToMailingList sends an email to the mailing list notifying of a new blog post.
+	SendNotificationToMailingList(postTitle string, textContent, htmlContent string) error
 }
 
 /// ValidateEmailAddress checks whether an email address is valid.

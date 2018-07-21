@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"net/http"
-	"time"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
@@ -17,37 +16,27 @@ import (
 	"github.com/gorilla/sessions"
 
 	"github.com/mybb/mybb-blog-mailer/mail"
-	"github.com/mybb/mybb-blog-mailer/templating"
 )
 
 type SubscriptionService struct {
 	mailHandler  mail.Handler
 	templates    *template.Template
-	httpClient   *http.Client
 	sessionStore sessions.Store
 	hmacSecret   string
 }
 
 type FlashMessages map[string]string
 
-func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string, sessionKey []byte) (*SubscriptionService, error) {
-	templates, err := templating.FindAndParseTemplates("./templates", templating.BuildDefaultFunctionMap())
-
-	if err != nil {
-		return nil, fmt.Errorf("error initialising templates: %s", err)
-	}
-
+func NewSubscriptionService(mailHandler mail.Handler, templates *template.Template, hmacSecret string,
+	sessionKey []byte) (*SubscriptionService) {
 	gob.Register(&FlashMessages{})
 
 	return &SubscriptionService{
 		mailHandler: mailHandler,
 		templates:   templates,
-		httpClient: &http.Client{
-			Timeout: time.Second * 5,
-		},
 		sessionStore: sessions.NewCookieStore(sessionKey),
 		hmacSecret: hmacSecret,
-	}, nil
+	}
 }
 
 /// Index handles a request to /, showing the sign-up form.

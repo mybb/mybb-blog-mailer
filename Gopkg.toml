@@ -26,13 +26,41 @@
 
 
 [[constraint]]
-  name = "github.com/microcosm-cc/bluemonday"
-  version = "1.0.0"
+  name = "github.com/google/go-github"
+  version = "15.0.0"
 
-[prune]
-  go-tests = true
-  unused-packages = true
+[[constraint]]
+  name = "github.com/gorilla/csrf"
+  version = "1.5.1"
 
 [[constraint]]
   name = "github.com/gorilla/mux"
   version = "1.6.2"
+
+[[constraint]]
+  name = "github.com/gorilla/sessions"
+  version = "1.1.1"
+
+[[constraint]]
+  branch = "master"
+  name = "github.com/goware/emailx"
+
+[[constraint]]
+  name = "github.com/joho/godotenv"
+  version = "1.2.0"
+
+[[constraint]]
+  name = "github.com/microcosm-cc/bluemonday"
+  version = "1.0.0"
+
+[[constraint]]
+  name = "github.com/mmcdole/gofeed"
+  version = "1.0.0-beta2"
+
+[[constraint]]
+  name = "gopkg.in/mailgun/mailgun-go.v1"
+  version = "1.1.0"
+
+[prune]
+  go-tests = true
+  unused-packages = true

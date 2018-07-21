@@ -2,6 +2,7 @@ package mailgun
 
 import (
 	"log"
+	"fmt"
 
 	"gopkg.in/mailgun/mailgun-go.v1"
 
@@ -14,6 +15,7 @@ type Handler struct {
 	client mailgun.Mailgun
 	useEmailValidation bool
 	mailingListAddress string
+	fromAddressName string
 }
 
 /// NewHandler creates a new MailGun mail handler using the given configuration.
@@ -26,6 +28,7 @@ func NewHandler(configuration *config.MailGunConfig) *Handler {
 		),
 		useEmailValidation: configuration.EmailValidation,
 		mailingListAddress: configuration.MailingListAddress,
+		fromAddressName: configuration.FromName,
 	}
 }
 
@@ -81,4 +84,28 @@ func (h *Handler) SubscribeEmailToMailingList(emailAddress, name string) error {
 	}
 
 	return h.client.CreateMember(true, h.mailingListAddress, member)
+}
+
+/// SendNotificationToMailingList sends an email to the mailing list notifying of a new blog post.
+func (h *Handler) SendNotificationToMailingList(postTitle string, textContent, htmlContent string) error {
+	var fromAddress string
+	if len(h.fromAddressName) > 0 {
+		fromAddress = fmt.Sprintf("%s <%s>", h.fromAddressName, h.mailingListAddress)
+	} else {
+		fromAddress = h.mailingListAddress
+	}
+
+	message := h.client.NewMessage(fromAddress, "New MyBB Blog Post: " + postTitle, textContent, h.mailingListAddress)
+
+	message.SetHtml(htmlContent)
+	message.AddHeader("List-Unsubscribe", "%unsubscribe_email%")
+
+	resp, id, err := h.client.Send(message)
+	if err != nil {
+		return err
+	}
+
+	log.Printf("Sent blog post notificaion for post '%s' with id %s and status: %s\n", postTitle, id, resp)
+
+	return nil
 }

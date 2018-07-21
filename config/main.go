@@ -4,7 +4,7 @@ import (
 	"math"
 	"fmt"
 	"os"
-	
+
 	"github.com/joho/godotenv"
 
 	"github.com/mybb/mybb-blog-mailer/helpers"
