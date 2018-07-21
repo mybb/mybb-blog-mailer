@@ -82,7 +82,7 @@ func (subService *SubscriptionService) Index(w http.ResponseWriter, r *http.Requ
 
 	subService.templates.ExecuteTemplate(w, "index.html", map[string]interface{}{
 		csrf.TemplateTag: csrf.TemplateField(r),
-		"errors": errors,
+		"messages": errors,
 	})
 }
 
@@ -149,17 +149,15 @@ func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Req
 	isValidEmail, err := subService.mailHandler.CheckValidEmail(emailAddress[0])
 
 	if err != nil || !isValidEmail {
+		var errorMessage string
 		if err != nil {
-			log.Printf("[ERROR] parsing email address '%s': %s\n", emailAddress, err)
-
-			http.Error(w, fmt.Sprintf("Error parsing email address: %s", err),
-				http.StatusInternalServerError)
-
-			return
+			errorMessage = fmt.Sprintf("Invalid email address: %s", err)
+		} else {
+			errorMessage = "Invalid email address"
 		}
 
 		session.AddFlash(FlashMessages{
-			"error": "Invalid email address",
+			"error": errorMessage,
 		})
 
 		if err = session.Save(r, w); err != nil {
