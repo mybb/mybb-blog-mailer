@@ -24,10 +24,14 @@ func init() {
 }
 
 func main() {
-	configuration, err := config.InitConfigFromFlags()
+	configFilePath := flag.String("config", "./config.toml", "The path to the configuration file")
+
+	flag.Parse()
+
+	configuration, err := config.InitConfigFromConfigFile(*configFilePath)
 
 	if err != nil {
-		log.Printf("Error initialising confguration: %s\n", err)
+		log.Printf("[ERROR] initialising configuration: %s\n", err)
 		flag.Usage()
 		os.Exit(1)
 	}
@@ -37,7 +41,7 @@ func main() {
 	subscriptionService, err := NewSubscriptionService(mailHandler, configuration.HmacSecret)
 
 	if err != nil {
-		log.Fatalf("Error initialising subscription service: %s\n", err)
+		log.Fatalf("[ERROR] initialising subscription service: %s\n", err)
 	}
 
 	router := newRouter(subscriptionService)
@@ -45,11 +49,16 @@ func main() {
 	middlewareStack, err := bindMiddleware(router)
 
 	if err != nil {
-		log.Fatalf("Error binding middlware: %s\n", err)
+		log.Fatalf("[ERROR] binding middlware: %s\n", err)
 	}
 
-	log.Fatalf("Error running HTTP server: %s\n",
-		http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), middlewareStack))
+	log.Printf("[DEBUG] starting HTTP server on :%d\n", configuration.ListenPort)
+
+	err = http.ListenAndServe(":"+strconv.Itoa(configuration.ListenPort), middlewareStack)
+
+	if err != nil {
+		log.Fatalf("[ERROR] running HTTP server: %s\n", err)
+	}
 }
 
 /// newRouter creates and configures a HTTP router to dispatch requests to handlers.
@@ -58,13 +67,13 @@ func newRouter(subscriptionService *SubscriptionService) *mux.Router {
 
 	router.HandleFunc("/", subscriptionService.Index).Methods("GET").Name("index")
 	router.HandleFunc("/signup", subscriptionService.SignUp).Methods("POST").Name("sign_up")
-	router.HandleFunc("/confirm", subscriptionService.ConfirmSignup).Methods("GET").Name(
+	router.HandleFunc("/confirm", subscriptionService.ConfirmSignUp).Methods("GET").Name(
 		"confirm_signup")
 
 	return router
 }
 
-/// bindMiddleware wraps a HTTP handleware with the middleware stack.
+/// bindMiddleware wraps a HTTP handler with a stack of middleware.
 func bindMiddleware(handler http.Handler) (http.Handler, error) {
 	csrfAuthKey, err := generateCsrfAuthKey()
 
@@ -217,7 +226,7 @@ func generateCsrfAuthKey() ([]byte, error) {
 ////
 ////	var plainTextContentBuffer bytes.Buffer
 ////
-////	err = templates.ExecuteTemplate(&plainTextContentBuffer, "email.tmpl", newBlogPost)
+////	err = templates.ExecuteTemplate(&plainTextContentBuffer, "blog_post_notification.txt", newBlogPost)
 ////
 ////	if err != nil {
 ////		log.Printf("[ERROR] unable to create plaintext email content: %s\n", err)
@@ -227,7 +236,7 @@ func generateCsrfAuthKey() ([]byte, error) {
 ////
 ////	var htmlContentBuffer bytes.Buffer
 ////
-////	err = templates.ExecuteTemplate(&htmlContentBuffer, "email.html", newBlogPost)
+////	err = templates.ExecuteTemplate(&htmlContentBuffer, "blog_post_notification.html", newBlogPost)
 ////
 ////	if err != nil {
 ////		log.Printf("[ERROR] unable to create HTML email content: %s\n", err)
@@ -328,41 +337,5 @@ func generateCsrfAuthKey() ([]byte, error) {
 ////
 ////		http.Error(w, warningMessage, http.StatusNotImplemented)
 ////		return
-////	}
-////}
-////
-////func handleSubscribe(writer http.ResponseWriter, request *http.Request) {
-////	email, _ := getSubscribeEmail(request)
-////	// TODO: If there's an error, show an error page instead...
-////
-////	if len(email) > 0 {
-////		// TODO: Subscribe to mailing list and show success page...
-////	}
-////
-////	templates.ExecuteTemplate(writer, "index.html", nil)
-////}
-////
-////func getSubscribeEmail(request *http.Request) (string, error) {
-////	query := request.URL.Query()
-////
-////	if keys, ok := query["email"]; !ok || len(keys[0]) < 1 {
-////		return "", nil
-////	} else {
-////		// email is a base64 encoded AES GCM encrypted email address - it is done this way to ensure the request to subscribe was actually confirmed from the confirmation email
-////		base64Email := keys[0]
-////
-////		decodedBytes, err := base64.URLEncoding.DecodeString(base64Email)
-////
-////		if err != nil {
-////			return "", fmt.Errorf("error base64 decoding email: %s", err)
-////		}
-////
-////		decryptedBytes, err := decrypt(decodedBytes)
-////
-////		if err != nil {
-////			return "", fmt.Errorf("error decrypting email: %s", err)
-////		}
-////
-////		return string(decryptedBytes), nil
 ////	}
 ////}

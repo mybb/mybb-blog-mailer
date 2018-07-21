@@ -1,10 +1,12 @@
 package mailgun
 
 import (
+	"log"
+
+	"gopkg.in/mailgun/mailgun-go.v1"
+
 	"github.com/mybb/mybb-blog-mailer/config"
 	"github.com/mybb/mybb-blog-mailer/mail"
-	"gopkg.in/mailgun/mailgun-go.v1"
-	"log"
 )
 
 /// Handler wraps a MailGun API client to make it easy to send emails to perform tasks related to emails.

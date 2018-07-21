@@ -10,11 +10,13 @@
         <!-- TODO: Serve stylesheet locally -->
         <link rel="stylesheet" href="https://mybb.github.io/mybb-website-theme/assets/css/main.css">
     </head>
-    <body>
-        <article class="main">
+    <body class="section section--home">
+        {{ template "partials/header.html" }}
+
+        <article class="main main--home">
             <header class="main-feature">
                 <div class="wrapper">
-                    <h1 class="main-feature__page-title">Sign Up To MyBB Blog Email Updates</h1>
+                    <h1 class="main-feature__page-title">Sign Up For MyBB Blog Email Updates</h1>
 
                     <p class="main-feature__description">
                         You can sign up to receive email notifications of new posts posted to the MyBB Blog by entering your email below.
@@ -25,12 +27,32 @@
                 <form method="post" action="/signup">
                     {{ .csrfField }}
 
-                    <input type="text" placeholder="Please enter your name so we know how to address you"
-                           name="name" required>
-                    <input type="email" placeholder="Please enter your email address to start receiving email notifications"
-                           name="email" required>
-
-                    <button type="submit">Subscribe</button>
+                    <section class="block block--form form">
+                        <div class="section section--form">
+                            <div class="row row--form field">
+                                <h3 class="field__name"><label for="name">Name</label></h3>
+                                <p class="field__description">
+                                    Please enter your name so that we know how to address you in the email notifications we send.
+                                </p>
+                                <input type="text" class="textbox" name="name" id="name" required autofocus
+                                    placeholder="Please enter your name">
+                            </div>
+                            <div class="row row--form field">
+                                <h3 class="field__name"><label for="email">Email Address</label></h3>
+                                <p class="field__description">
+                                    Please enter the email address you want us to send blog post notifications to
+                                </p>
+                                <input type="email" class="textbox" name="email" id="email" required
+                                       placeholder="Please enter your email address">
+                            </div>
+                        </div>
+                        <div class="form__submit">
+                            <button type="submit" class="button button--big" tabindex="3">
+                                <i class="button__icon fas fa-user-plus-alt"></i>
+                                <span class="button__text">Subscribe</span>
+                            </button>
+                        </div>
+                    </section>
                 </form>
             </div>
         </article>

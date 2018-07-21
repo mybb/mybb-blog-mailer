@@ -26,6 +26,12 @@
   version = "v1.1.1"
 
 [[projects]]
+  name = "github.com/gorilla/sessions"
+  packages = ["."]
+  revision = "03b6f63cc43ef9c7240a635a5e22b13180e822b8"
+  version = "v1.1.1"
+
+[[projects]]
   branch = "master"
   name = "github.com/goware/emailx"
   packages = ["."]
@@ -36,6 +42,12 @@
   packages = ["."]
   revision = "dafebb5b6ff2861a0d69af64991e10866c19be85"
   version = "v1.0.0"
+
+[[projects]]
+  name = "github.com/pelletier/go-toml"
+  packages = ["."]
+  revision = "c01d1270ff3e442a8a57cddc1c92dc1138598194"
+  version = "v1.2.0"
 
 [[projects]]
   name = "github.com/pkg/errors"
@@ -61,6 +73,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "528ccc12711bc59e28420502b9203f6b934c021d5cd5769dc6b59a65ba50c27f"
+  inputs-digest = "bc328df826cc1ed4f19149d11910409957073273c4cdfe8ca7b80ced1c074e19"
   solver-name = "gps-cdcl"
   solver-version = 1

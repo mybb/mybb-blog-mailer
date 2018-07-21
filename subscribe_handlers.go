@@ -5,38 +5,40 @@ import (
 	"html/template"
 	"net/http"
 	"time"
-
-	"github.com/microcosm-cc/bluemonday"
-	"github.com/gorilla/csrf"
-
-	"github.com/mybb/mybb-blog-mailer/mail"
 	"bytes"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/base64"
 	"crypto/subtle"
+	"log"
+	"encoding/gob"
+
+	"github.com/gorilla/csrf"
+	"github.com/gorilla/sessions"
+	"github.com/gorilla/securecookie"
+
+	"github.com/mybb/mybb-blog-mailer/mail"
+	"github.com/mybb/mybb-blog-mailer/templating"
 )
 
 type SubscriptionService struct {
-	mailHandler mail.Handler
-	templates   *template.Template
-	httpClient  *http.Client
-	hmacSecret string
+	mailHandler  mail.Handler
+	templates    *template.Template
+	httpClient   *http.Client
+	sessionStore sessions.Store
+	hmacSecret   string
 }
 
+type FlashMessages map[string]string
+
 func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string) (*SubscriptionService, error) {
-	templates, err := template.New("").Funcs(template.FuncMap{
-		"toPlainText": func(target string) string {
-			return bluemonday.StrictPolicy().Sanitize(target)
-		},
-		"stripUnsafeTags": func(target string) string {
-			return bluemonday.UGCPolicy().Sanitize(target)
-		},
-	}).ParseGlob("./templates/*")
+	templates, err := templating.FindAndParseTemplates("./templates", templating.BuildDefaultFunctionMap())
 
 	if err != nil {
 		return nil, fmt.Errorf("error initialising templates: %s", err)
 	}
+
+	gob.Register(&FlashMessages{})
 
 	return &SubscriptionService{
 		mailHandler: mailHandler,
@@ -44,53 +46,159 @@ func NewSubscriptionService(mailHandler mail.Handler, hmacSecret string) (*Subsc
 		httpClient: &http.Client{
 			Timeout: time.Second * 5,
 		},
+		sessionStore: sessions.NewCookieStore(securecookie.GenerateRandomKey(32)), // TODO: do not hardcode session key
 		hmacSecret: hmacSecret,
 	}, nil
 }
 
 /// Index handles a request to /, showing the sign-up form.
 func (subService *SubscriptionService) Index(w http.ResponseWriter, r *http.Request) {
+	session, err := subService.sessionStore.Get(r, "blog-mailer-session")
+	if err != nil {
+		log.Printf("[ERROR] getting session for request: %s\n", err)
+
+		http.Error(w, fmt.Sprintf("Error getting session for request: %s", err),
+			http.StatusInternalServerError)
+
+		return
+	}
+
+	errors := make(FlashMessages)
+
+	flashes := session.Flashes()
+	if len(flashes) > 0 {
+		if decodedErrors, ok := flashes[0].(*FlashMessages); !ok {
+			// Handle the case that it's not an expected type
+			log.Printf("[ERROR] decoding flash values for request: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error decoding flash values for request: %s", err),
+				http.StatusInternalServerError)
+
+			return
+		} else {
+			errors = *decodedErrors
+		}
+	}
+
 	subService.templates.ExecuteTemplate(w, "index.html", map[string]interface{}{
 		csrf.TemplateTag: csrf.TemplateField(r),
+		"errors": errors,
 	})
 }
 
 /// SignUp handles a POST request to /signup, validating the request and subscribing the user to the mailing list.
 func (subService *SubscriptionService) SignUp(w http.ResponseWriter, r *http.Request) {
-	err := r.ParseForm()
+	session, err := subService.sessionStore.Get(r, "blog-mailer-session")
+	if err != nil {
+		log.Printf("[ERROR] getting session for request: %s\n", err)
+
+		http.Error(w, fmt.Sprintf("Error getting session for request: %s", err),
+			http.StatusInternalServerError)
+
+		return
+	}
+
+	err = r.ParseForm()
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error parsing form data for subscribe request: %s", err), 500)
+		log.Printf("[ERROR] parsing form data for subscribe request: %s\n", err)
+
+		http.Error(w, fmt.Sprintf("Error parsing form data for subscribe request: %s", err),
+			http.StatusInternalServerError)
 		return
 	}
 
-	emailAddress := r.PostForm.Get("email")
-	name := r.PostForm.Get("name")
+	name, ok := r.PostForm["name"]
 
-	if len(emailAddress) == 0 || len(name) == 0 {
-		http.Error(w, "No emaila ddress or name provided", 500)
-		return
-	}
+	if !ok || len(name) == 0 || len(name[0]) == 0 {
+		session.AddFlash(FlashMessages{
+			"error": "Name is required",
+		})
 
-	isValidEmail, err := subService.mailHandler.CheckValidEmail(emailAddress)
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
 
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error validating email: %s", err), 500)
-		return
-	}
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
 
-	if !isValidEmail {
 		http.Redirect(w, r, "/", 301)
-		// TODO: Flash message about invalid email?
 		return
 	}
 
-	err = subService.sendEmailSubscriptionConfirmation(emailAddress, name)
+	emailAddress, ok := r.PostForm["email"]
+
+	if !ok || len(emailAddress) == 0 || len(emailAddress[0]) == 0 {
+		session.AddFlash(FlashMessages{
+			"error": "Email address is required",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
+		return
+	}
+
+	isValidEmail, err := subService.mailHandler.CheckValidEmail(emailAddress[0])
+
+	if err != nil || !isValidEmail {
+		if err != nil {
+			log.Printf("[ERROR] parsing email address '%s': %s\n", emailAddress, err)
+
+			http.Error(w, fmt.Sprintf("Error parsing email address: %s", err),
+				http.StatusInternalServerError)
+
+			return
+		}
+
+		session.AddFlash(FlashMessages{
+			"error": "Invalid email address",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
+		return
+	}
+
+	err = subService.sendEmailSubscriptionConfirmation(emailAddress[0], name[0])
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error sending confirmation email: %s", err), 500)
+		log.Printf("[ERROR] sending subscription confirmation email to '%s': %s\n", emailAddress, err)
+
+		session.AddFlash(FlashMessages{
+			"error": "Failed to send subscription confirmation email",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
+
+	subService.templates.ExecuteTemplate(w, "signup.html", map[string]interface{}{
+		"name": name[0],
+		"emailAddress": emailAddress[0],
+	})
 }
 
 func (subService *SubscriptionService) sendEmailSubscriptionConfirmation(emailAddress, name string) error {
@@ -99,7 +207,7 @@ func (subService *SubscriptionService) sendEmailSubscriptionConfirmation(emailAd
 
 	token := subService.generateEmailConfirmationToken(emailAddress, name)
 
-	err := subService.templates.ExecuteTemplate(&plainTextContentBuffer, "confirm_subscription_email.tmpl", map[string]string{
+	err := subService.templates.ExecuteTemplate(&plainTextContentBuffer, "emails/confirm_subscription.txt", map[string]string{
 		"emailAddress": emailAddress,
 		"name": name,
 		"token": token,
@@ -109,7 +217,7 @@ func (subService *SubscriptionService) sendEmailSubscriptionConfirmation(emailAd
 		return err
 	}
 
-	err = subService.templates.ExecuteTemplate(&htmlContentBuffer, "confirm_subscription_email.html", map[string]string{
+	err = subService.templates.ExecuteTemplate(&htmlContentBuffer, "emails/confirm_subscription.html", map[string]string{
 		"emailAddress": emailAddress,
 		"name": name,
 		"token": token,
@@ -135,7 +243,7 @@ func (subService *SubscriptionService) generateEmailConfirmationToken(emailAddre
 	return base64.URLEncoding.EncodeToString(h.Sum(nil))
 }
 
-func (subService *SubscriptionService) ConfirmSignup(w http.ResponseWriter, r *http.Request) {
+func (subService *SubscriptionService) ConfirmSignUp(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 
 	emailAddress, ok := query["emailAddress"]
