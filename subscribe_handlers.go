@@ -242,40 +242,121 @@ func (subService *SubscriptionService) generateEmailConfirmationToken(emailAddre
 }
 
 func (subService *SubscriptionService) ConfirmSignUp(w http.ResponseWriter, r *http.Request) {
+	session, err := subService.sessionStore.Get(r, "blog-mailer-session")
+	if err != nil {
+		log.Printf("[ERROR] getting session for request: %s\n", err)
+
+		http.Error(w, fmt.Sprintf("Error getting session for request: %s", err),
+			http.StatusInternalServerError)
+
+		return
+	}
+
 	query := r.URL.Query()
 
 	emailAddress, ok := query["emailAddress"]
 
-	if !ok || len(emailAddress) == 0 {
-		http.Error(w, "Email address parameter missing", 400)
+	if !ok || len(emailAddress) == 0 || len(emailAddress[0]) == 0 {
+		session.AddFlash(FlashMessages{
+			"error": "Email address missing",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
 
 	name, ok := query["name"]
 
-	if !ok || len(name) == 0 {
-		http.Error(w, "Name parameter missing", 400)
+	if !ok || len(name) == 0 || len(name[0]) == 0 {
+		session.AddFlash(FlashMessages{
+			"error": "Name missing",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
 
 	token, ok := query["token"]
 
-	if !ok || len(token) == 0 {
-		http.Error(w, "Token parameter missing", 400)
+	if !ok || len(token) == 0 || len(token[0]) == 0 {
+		session.AddFlash(FlashMessages{
+			"error": "Token missing",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
 
 	expectedToken := subService.generateEmailConfirmationToken(emailAddress[0], name[0])
 
 	if subtle.ConstantTimeCompare([]byte(expectedToken), []byte(token[0])) != 1 {
-		http.Error(w, "Invalid token", 400)
+		log.Printf(
+			"[ERROR] the provided email address '%s' didn't match the details originally registered according to the token\n",
+			emailAddress[0])
+
+		session.AddFlash(FlashMessages{
+			"error": "The provided email address and name didn't match the details originally registered, please try again",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
 
-	err := subService.mailHandler.SubscribeEmailToMailingList(emailAddress[0], name[0])
+	err = subService.mailHandler.SubscribeEmailToMailingList(emailAddress[0], name[0])
 
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Error subscribing to mailing list: %s", err), 400)
+		log.Printf("[ERROR] subscribing email '%s' to the mailing list: %s\n", emailAddress[0], err)
+
+		session.AddFlash(FlashMessages{
+			"error": "Error subscribing to the mailing list",
+		})
+
+		if err = session.Save(r, w); err != nil {
+			log.Printf("[ERROR] saving session data: %s\n", err)
+
+			http.Error(w, fmt.Sprintf("Error saving session data: %s", err),
+				http.StatusInternalServerError)
+			return
+		}
+
+		http.Redirect(w, r, "/", 301)
 		return
 	}
+
+	subService.templates.ExecuteTemplate(w, "confirm.html", map[string]interface{}{
+		"name": name[0],
+		"emailAddress": emailAddress[0],
+	})
 }
